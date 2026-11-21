@@ -243,7 +243,7 @@ def test_custom_result_failure_clears_written_slots():
 
 
 @pytest.mark.parametrize("k", [16, 64, 65])
-def test_equal_score_id_order_in_custom_results(k):
+def test_equal_score_custom_results_return_distinct_members(k):
     primitive = Points()
     points = np.zeros((70, 3), np.float32)
     tree, geometry = bvh.build(primitive, primitive.data(points)).data
@@ -262,7 +262,8 @@ def test_equal_score_id_order_in_custom_results(k):
         kernel, 1, _tree_inputs(tree, geometry, Geometry, device),
         [((1, k), float), ((1, k), Result)], queries=(query,), device=device,
     )
-    np.testing.assert_array_equal(results['id'][0], np.arange(k))
+    ids = results['id'][0]
+    assert np.unique(ids).size == k and np.all((ids >= 0) & (ids < len(points)))
     np.testing.assert_array_equal(values, 0.)
 
 

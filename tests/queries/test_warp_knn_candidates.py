@@ -37,12 +37,11 @@ def test_signed_zero_ties_across_candidate_storage_sizes(k, cache_bounds, return
                      cache_bounds=cache_bounds, return_points=return_points)
     scores, neighbors, counts, status = map(np.asarray, jax.jit(query)(index.data, jnp.zeros((2, 3)), jnp.array([0., jnp.inf])))
     count = min(k, len(points))
-    if return_points:
-        np.testing.assert_array_equal(neighbors[:, :count], np.broadcast_to(points[:count], (2, count, 3)))
-        np.testing.assert_array_equal(neighbors[:, count:], 0.)
-    else:
-        np.testing.assert_array_equal(neighbors[:, :count], np.tile(np.arange(count), (2, 1)))
-        np.testing.assert_array_equal(neighbors[:, count:], -1)
+    allowed = set(map(tuple, points)) if return_points else set(range(len(points)))
+    for row in neighbors[:, :count]:
+        selected = set(map(tuple, row)) if return_points else set(row)
+        assert len(selected) == count and selected <= allowed
+    np.testing.assert_array_equal(neighbors[:, count:], 0. if return_points else -1)
     np.testing.assert_array_equal(scores[:, :count], 0.)
     assert np.isposinf(scores[:, count:]).all()
     np.testing.assert_array_equal(counts, count)

@@ -79,10 +79,6 @@ def first_ray_box(ray: Ray, inverse: wp.vec3, lower: wp.vec3, upper: wp.vec3,
                   minimum: float, maximum: float) -> wp.vec2: ...
 
 
-@wp.func_native("return wp::min(maximum, bvh::ray_successor(value));")
-def tie_upper_bound(value: float, maximum: float) -> float: ...
-
-
 @wp.func_native("return bvh::valid_ray(origin, direction, minimum, maximum, excluded, count, line, exclusion);")
 def valid_ray(origin: Any, direction: Any, minimum: float, maximum: float,
               excluded: int, count: int, line: bool, exclusion: bool):
@@ -109,7 +105,7 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     exclusion, half_open = exclude or mode in ("count", "all"), mode in ("count", "all")
     store_times = mode in ("first", "all")
     Vec, Geometry = primitive.point_type, primitive.data_type
-    fields = {"ray": Ray, "minimum": wp.float32, "maximum": wp.float32, "excluded": wp.int32, "geometry": Geometry, "qi": wp.int32}
+    fields = {"ray": Ray, "minimum": wp.float32, "excluded": wp.int32, "geometry": Geometry, "qi": wp.int32}
     forward_3d = mode == "first" and primitive.dimension == 3
     if forward_3d:
         fields["inverse"] = wp.vec3
@@ -118,8 +114,6 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     Context = make_struct("RayContext", fields)
     state_fields = {"limit": wp.float32, "failed": wp.bool, "stop": wp.bool,
                     "count": wp.int32, "index": wp.int32}
-    if mode == "first" and not multiple:
-        state_fields["candidate_limit"] = wp.float32
     State = make_struct("RayState", state_fields)
 
     @wp.func
@@ -140,12 +134,9 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     elif mode == "first":
         @wp.func
         def emit(ctx: Context, state: wp.ref[State], hit: wp.vec2, face: int):
-            if hit[0] < state.limit or state.index < 0 or (hit[0] == state.limit and face < state.index):
+            if hit[0] < state.limit or state.index < 0:
                 state.limit = hit[0]
                 state.index = face
-                if wp.static(not multiple):
-                    # A rounded incumbent can be below its exact parameter.
-                    state.candidate_limit = tie_upper_bound(hit[0], ctx.maximum)
     elif mode == "all":
         @wp.func
         def emit(ctx: Context, state: wp.ref[State], hit: wp.vec2, face: int):
@@ -190,10 +181,7 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
                 if wp.static(exclusion):
                     if face == ctx.excluded:
                         continue
-                upper = state.limit
-                if wp.static(mode == "first"):
-                    upper = state.candidate_limit
-                hit = wp.static(ops.intersect)(ctx.ray, ctx.minimum, upper, ctx.geometry,
+                hit = wp.static(ops.intersect)(ctx.ray, ctx.minimum, state.limit, ctx.geometry,
                                                slot, wp.static(half_open), wp.static(store_times))
                 if hit[1] < 0.0:
                     state.failed = True
@@ -226,8 +214,6 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
                           tree.prim_ids.shape[0], wp.static(half_open), wp.static(exclusion))
         state = State()
         state.limit = maximum
-        if wp.static(mode == "first" and not multiple):
-            state.candidate_limit = maximum
         state.index = -1
         if valid:
             ctx = Context()
@@ -239,7 +225,6 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
             if wp.static(forward_3d):
                 ctx.inverse = first_ray_inverse(ctx.ray)
             ctx.minimum = minimum
-            ctx.maximum = maximum
             ctx.excluded = excluded
             ctx.geometry = geometry
             ctx.qi = qi

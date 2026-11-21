@@ -65,18 +65,6 @@ CUDA_CALLABLE inline bool valid_ray(const Vec &origin, const Vec &direction, flo
     return line ? nonzero : minimum >= 0.f && wp::dot(direction, direction) > 1.e-30f;
 }
 
-CUDA_CALLABLE inline float ray_successor(float t) {
-    // Valid first-hit parameters are finite and nonnegative, including -0.
-    uint32_t bits = 0;
-    if (t != 0.f)
-        memcpy(&bits, &t, sizeof(bits));
-    // Keep a finite incumbent even when the next bit pattern is +infinity.
-    bits = bits < 0x7f7fffffu ? bits + 1u : bits;
-    float result;
-    memcpy(&result, &bits, sizeof(result));
-    return result;
-}
-
 template <class Ray>
 CUDA_CALLABLE inline wp::vec2 ray_box(const Ray &ray, const wp::vec3 &lower, const wp::vec3 &upper,
                                       float minimum, float maximum, int dimension) {

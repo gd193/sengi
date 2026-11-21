@@ -14,7 +14,7 @@ from sengi.primitives.segments import Segments
 from sengi.queries.knn import bind as bind_knn
 from sengi.queries.nearest import bind as bind_nearest
 from sengi.bvh import Config  # noqa: E402
-from tests.support._oracle import knn_reference  # noqa: E402
+from tests.support._oracle import assert_knn_ids, knn_reference  # noqa: E402
 
 OPTIONS = list(product((False, True), repeat=3))
 
@@ -59,12 +59,14 @@ def test_all_traversal_combinations(points_scene, cached, packed, grouped, k):
     expected[-1][-3:] = -1
     if k == 1:
         valid = expected[2] > 0
-        np.testing.assert_array_equal(result[0][valid], points[expected[1][valid, 0]])
-        for actual, wanted in zip(result[1:], (expected[0][:, 0], expected[1][:, 0], expected[3])):
-            np.testing.assert_array_equal(actual, wanted)
+        assert_knn_ids(scores, result[2][:, None], expected[0])
+        np.testing.assert_array_equal(result[0][valid], points[result[2][valid]])
+        np.testing.assert_array_equal(result[1], expected[0][:, 0])
+        np.testing.assert_array_equal(result[3], expected[3])
     else:
-        for actual, wanted in zip(result, expected):
-            np.testing.assert_array_equal(actual, wanted)
+        assert_knn_ids(scores, result[1], expected[0])
+        for i in (0, 2, 3):
+            np.testing.assert_array_equal(result[i], expected[i])
     assert run.lower(index.data, queries, caps).as_text().count("stablehlo.custom_call") == 1
 
 
@@ -74,7 +76,7 @@ def test_segment_scheduling_override(cached, packed, grouped):
     x = np.array([3., -2., 1., 0., 5.], np.float32)
     a = np.column_stack((x, np.zeros((5, 2), np.float32)))
     index = bvh.build(primitive, primitive.data(a, a + [0, 1, 0]), config=Config(leaf_size_threshold=1))
-    queries = np.array([[.2, .25, .25], [-1., .1, .2]], np.float32)
+    queries = np.array([[.2, .25, .25], [-1.2, .1, .2]], np.float32)
     scores = np.sqrt((queries[:, None, 0] - x)**2 + queries[:, None, 2]**2)
     call = bind_knn(index.spec, 3, Euclidean(), cache_bounds=cached,
                     packed_nodes=packed, group_leaves=grouped)

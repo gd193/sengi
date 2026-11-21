@@ -8,7 +8,7 @@ import warp as wp
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.queries.nearest import prepare_nearest
 from sengi.metrics.specialization import (
-    bind_nearest, emitted_score_limit, nearest_functions, resolve_metric,
+    bind_nearest, nearest_functions, resolve_metric,
 )
 from sengi.queries.results import resolve_result
 from sengi.queries.candidates import REGISTER_LIMIT, candidate_build_options, candidate_functions
@@ -58,8 +58,9 @@ def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=Non
     ``lower_bound(query, box_lower, box_upper)`` must conservatively bound that
     score, including float32 rounding. Box endpoints are always ``wp.vec3``.
     Queries use the policy query shape. Results are (scores_or_distances, ids,
-    count, status), ordered by emitted value then original ID. Missing entries
-    have +inf/-1 padding; failed rows are cleared. k is a positive Python int.
+    count, status), ordered by internal score. Equal scores can return any tied
+    IDs. Missing entries have +inf/-1 padding. Failed rows are cleared.
+    k is a positive Python int.
     With return_points=True, coordinates replace IDs and use zero padding.
     """
     primitive = spec.primitive
@@ -94,7 +95,6 @@ def _make_knn(primitive, k, metric, *, predicate=None,
     Candidates = candidates.storage
     add, limit, sort, get_count = candidates.add, candidates.limit, candidates.sort, candidates.count
     ops = bind_nearest(primitive, metric)
-    tie_limit = emitted_score_limit(ops)
     score_at = getattr(ops, "score_at", None)
     Query, Geometry = ops.query_type, primitive.data_type
     Point = primitive.point_type
@@ -129,15 +129,8 @@ def _make_knn(primitive, k, metric, *, predicate=None,
                 return
             if score <= state.limit:
                 index = load_array(tree.prim_ids, slot)
-                distance = wp.static(ops.to_distance)(score)
-                if not wp.isfinite(distance) or distance < 0.0:
-                    state.failed = True
-                    return
-                wp.static(add)(state.candidates, distance, index, slot)
-                if wp.static(tie_limit is not None):
-                    if wp.static(get_count)(state.candidates) == wp.static(k):
-                        cutoff = wp.static(limit)(state.candidates)
-                        state.limit = wp.min(state.limit, wp.static(tie_limit)(cutoff))
+                wp.static(add)(state.candidates, score, index, slot)
+                state.limit = wp.static(limit)(state.candidates, ctx.initial)
         return
 
     walk = make_walk(Context, State, bounds, visit, stack_capacity=stack_capacity,

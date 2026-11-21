@@ -4,9 +4,7 @@ from functools import lru_cache
 
 import warp as wp
 
-from sengi.metrics.nearest import (
-    Euclidean, NearestCallbacks, NearestOps, _euclidean_distance, _identity_score,
-)
+from sengi.metrics.nearest import Euclidean, NearestCallbacks, NearestOps
 from sengi.bvh.device_tree import DeviceTree
 from sengi.warp.contracts import WarpFunction
 
@@ -30,29 +28,6 @@ def resolve_metric(metric, evaluate, lower_bound, query_name):
     if evaluate is None or lower_bound is None:
         raise TypeError(f"{query_name} requires both evaluate and lower_bound callbacks")
     return NearestCallbacks(evaluate, lower_bound)
-
-
-@wp.func_native("""
-    // Positive float32 values have the same order as their IEEE-754 encodings.
-    uint32_t bits = 0;
-    if (distance > 0.f)
-        memcpy(&bits, &distance, sizeof(bits));
-    ++bits;
-    float upper;
-    memcpy(&upper, &bits, sizeof(upper));
-    return upper * upper;
-""")
-def _euclidean_tie_limit(distance: float) -> float: ...
-
-
-def emitted_score_limit(ops):
-    """Conservatively bound scores whose converted distance can tie the winner."""
-    if ops.to_distance is _euclidean_distance:
-        return _euclidean_tie_limit
-    if ops.to_distance is _identity_score:
-        return _identity_score
-    # A custom conversion may map a range of raw scores to one distance.
-    return None
 
 
 @lru_cache(maxsize=None)

@@ -86,12 +86,10 @@ Both FixedCandidateList and HeapCandidateList are measured. Already sorted cuBQL
 are sorted in place with O(k log k) heapsort inside the timed kernel, without
 a duplicate candidate array; ID remapping is also timed.
 
-External ties may select any equally close subset, rather than Warp's smallest
-original IDs. External wrappers preserve upstream score ordering and permit arbitrary
-ordering and selection among ties. The NumPy float64 sampled oracle checks cardinality,
-distances, membership, uniqueness and padding with common tolerances; incorrect
-results raise and leave a FAILED row in `results.json`. Warp additionally checks
-emitted tie order. `--validate-samples` controls oracle coverage. Fixtures are
+All implementations may select any equally close subset. The sampled NumPy
+float64 oracle checks cardinality, distance order, membership, uniqueness and
+padding. Incorrect results leave a FAILED row in `results.json`.
+`--validate-samples` controls oracle coverage. Fixtures are
 seeded and saved as common row-major little-endian float32 binary arrays.
 Outputs are separate `.scores` float32 and `.ids`, `.count`, `.status` int32
 arrays; raw per-repeat milliseconds and provenance are retained.

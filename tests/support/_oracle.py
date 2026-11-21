@@ -101,7 +101,7 @@ def oracle_aabb_overlap(tm: trimesh.Trimesh,
 
 
 def knn_reference(scores, k, cap=np.inf):
-    """Stable sorting preserves original IDs, independent of BVH packing."""
+    """Brute-force scores and one admissible set of primitive IDs."""
     scores = np.asarray(scores)
     shape = scores.shape[:-1]
     caps = np.broadcast_to(cap, shape)
@@ -109,9 +109,21 @@ def knn_reference(scores, k, cap=np.inf):
     ids = np.full(shape+(k,), -1, np.int32)
     count = np.zeros(shape, np.int32)
     for row in np.ndindex(shape):
-        selected = np.argsort(scores[row], kind="stable")
+        selected = np.argsort(scores[row])
         selected = selected[scores[row][selected] <= caps[row]][:k]
         count[row] = len(selected)
         values[row][:len(selected)] = scores[row][selected]
         ids[row][:len(selected)] = selected
     return values, ids, count, (count > 0).astype(np.int32)
+
+
+def assert_knn_ids(scores, ids, expected_values):
+    """Each reported ID must be distinct in its row and realize the expected score."""
+    scores, ids = np.asarray(scores), np.asarray(ids)
+    valid = np.isfinite(expected_values)
+    np.testing.assert_array_equal(ids[~valid], -1)
+    assert np.all((ids[valid] >= 0) & (ids[valid] < scores.shape[-1]))
+    selected = np.take_along_axis(scores, np.maximum(ids, 0), axis=-1)
+    np.testing.assert_array_equal(selected[valid], expected_values[valid])
+    for row, mask in zip(ids.reshape(-1, ids.shape[-1]), valid.reshape(-1, ids.shape[-1])):
+        assert np.unique(row[mask]).size == mask.sum()

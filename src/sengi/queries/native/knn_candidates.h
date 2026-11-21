@@ -14,7 +14,7 @@ template<int K> struct KnnCandidates<K, true, false> {
         #pragma unroll
         for (int i = 0; i < K; ++i) {
             scores[i] = INFINITY;
-            ids[i] = 0x7fffffff;
+            ids[i] = -1;
         }
     }
 };
@@ -35,7 +35,7 @@ template<int K> struct KnnCandidates<K, true, true> {
         for (int i = 0; i < K; ++i) {
             slots[i] = -1;
             scores[i] = INFINITY;
-            ids[i] = 0x7fffffff;
+            ids[i] = -1;
         }
     }
 };
@@ -47,10 +47,6 @@ template<int K> struct KnnCandidates<K, false, true> {
     CUDA_CALLABLE KnnCandidates() : size(0) {}
 };
 
-CUDA_CALLABLE inline bool knn_worse(float a, int ai, float b, int bi) {
-    return a > b || (a == b && ai > bi);
-}
-
 template<int K, bool Small, bool TrackSlots>
 CUDA_CALLABLE inline void knn_insert(KnnCandidates<K, Small, TrackSlots>& c, float score, int id, int slot = -1) {
     const int n = c.size;
@@ -60,7 +56,7 @@ CUDA_CALLABLE inline void knn_insert(KnnCandidates<K, Small, TrackSlots>& c, flo
         for (int i = 0; i < K; ++i) {
             const float previous_score = c.scores[i];
             const int previous_id = c.ids[i];
-            const bool replace = knn_worse(previous_score, previous_id, score, id);
+            const bool replace = previous_score > score;
             if constexpr (TrackSlots) {
                 const int previous_slot = c.slots[i];
                 c.slots[i] = replace ? slot : previous_slot;
@@ -73,15 +69,14 @@ CUDA_CALLABLE inline void knn_insert(KnnCandidates<K, Small, TrackSlots>& c, flo
         }
         if (n < K) c.size = n+1;
     } else {
-        // Nonnegative float bits preserve score order; the low word breaks ties.
-        // IEEE signed zeros compare equal, so normalize before encoding.
-        const uint64_t value = cache_entry(uint32_t(id), score == 0.0f ? 0.0f : score);
+        // Keep the ID in the low word for storage. Compare only the score.
+        const uint64_t value = cache_entry(uint32_t(id), score);
         if (n < K) {
             int p = n;
             c.size = n+1;
             while (p > 0) {
                 const int parent = (p-1)/4;
-                if (value <= c.entries[parent]) break;
+                if (score <= entry_score(c.entries[parent])) break;
                 c.entries[p] = c.entries[parent];
                 if constexpr (TrackSlots) c.slots[p] = c.slots[parent];
                 p = parent;
@@ -89,7 +84,7 @@ CUDA_CALLABLE inline void knn_insert(KnnCandidates<K, Small, TrackSlots>& c, flo
             c.entries[p] = value;
             if constexpr (TrackSlots) c.slots[p] = slot;
         } else {
-            if (value >= c.entries[0]) return;
+            if (score >= entry_score(c.entries[0])) return;
             int p = 0;
             // Four children shorten the sift. Retain the selected value to
             // avoid reloading it through a runtime-selected local index.
@@ -101,13 +96,13 @@ CUDA_CALLABLE inline void knn_insert(KnnCandidates<K, Small, TrackSlots>& c, flo
                     const int other = 4*p+1+offset;
                     if (other < K) {
                         const uint64_t other_value = c.entries[other];
-                        if (other_value > child_value) {
+                        if (entry_score(other_value) > entry_score(child_value)) {
                             child = other;
                             child_value = other_value;
                         }
                     }
                 }
-                if (child_value <= value) break;
+                if (entry_score(child_value) <= entry_score(value)) break;
                 c.entries[p] = child_value;
                 if constexpr (TrackSlots) c.slots[p] = c.slots[child];
                 p = child;
@@ -129,8 +124,8 @@ CUDA_CALLABLE inline int knn_id(const KnnCandidates<K, Small, TrackSlots>& c, in
     else return static_cast<int32_t>(uint32_t(c.entries[i]));
 }
 template<int K, bool Small, bool TrackSlots>
-CUDA_CALLABLE inline float knn_worst(const KnnCandidates<K, Small, TrackSlots>& c) {
-    return knn_score(c, Small ? K-1 : 0);
+CUDA_CALLABLE inline float knn_limit(const KnnCandidates<K, Small, TrackSlots>& c, float initial) {
+    return c.size < K ? initial : knn_score(c, Small ? K-1 : 0);
 }
 template<int K, bool Small, bool TrackSlots>
 CUDA_CALLABLE inline void knn_sort(KnnCandidates<K, Small, TrackSlots>& c) {
@@ -152,13 +147,13 @@ CUDA_CALLABLE inline void knn_sort(KnnCandidates<K, Small, TrackSlots>& c) {
                     const int other = 4*p+1+offset;
                     if (other < end) {
                         const uint64_t other_value = c.entries[other];
-                        if (other_value > child_value) {
+                        if (entry_score(other_value) > entry_score(child_value)) {
                             child = other;
                             child_value = other_value;
                         }
                     }
                 }
-                if (child_value <= value) break;
+                if (entry_score(child_value) <= entry_score(value)) break;
                 c.entries[p] = child_value;
                 if constexpr (TrackSlots) c.slots[p] = c.slots[child];
                 p = child;

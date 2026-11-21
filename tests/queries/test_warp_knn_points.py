@@ -33,7 +33,7 @@ def check_points(result, expected, coordinates):
 @pytest.mark.parametrize("k", [1, 4, 16, 17, 64, 65, 128])
 def test_points_order_slots_caps_and_storage_paths(dimension, k):
     rng = np.random.default_rng(614)
-    points = rng.integers(-8, 9, size=(97, dimension)).astype(np.float32)
+    points = rng.uniform(-8, 8, size=(97, dimension)).astype(np.float32)
     queries = rng.integers(-4, 5, size=(2, 3, dimension)).astype(np.float32)
     weights = (0.5, 2., 4.)[:dimension]
     evaluate, bound = weighted_callbacks(dimension, weights)
@@ -68,7 +68,7 @@ def test_extended_primitive_coordinates_and_independent_options(cached, packed, 
     a = np.column_stack((x, np.zeros((5, 2), np.float32)))
     primitive = Segments()
     index = bvh.build(primitive, primitive.data(a, a + [0, 1, 0]), config=Config(leaf_size_threshold=1))
-    queries = np.array([[.2, .25, .25], [-1., 1.5, .2]], np.float32)
+    queries = np.array([[.2, .25, .25], [-1.2, 1.5, .2]], np.float32)
     projected = np.broadcast_to(a, (2, 5, 3)).copy()
     projected[:, :, 1] = np.clip(queries[:, 1], 0., 1.)[:, None]
     expected = knn_reference(np.linalg.norm(queries[:, None] - projected, axis=-1), k)
@@ -86,7 +86,7 @@ def test_triangle_coordinates_are_projections():
     facets = np.stack((a, a + [0, 1, 0], a + [0, 0, 1]), axis=1)
     index = bvh.build(primitive, primitive.indexed(facets.reshape(-1, 3), np.arange(15).reshape(5, 3)),
                             config=Config(leaf_size_threshold=1))
-    queries = np.array([[.2, .25, .25], [-1., .1, .2]], np.float32)
+    queries = np.array([[.2, .25, .25], [-1.2, .1, .2]], np.float32)
     expected = knn_reference(np.abs(queries[:, None, 0] - x), 4)
     coordinates = np.broadcast_to(queries[:, None], (2, 4, 3)).copy()
     coordinates[:, :, 0] = x[expected[1]]

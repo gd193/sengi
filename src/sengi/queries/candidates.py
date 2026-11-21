@@ -50,8 +50,8 @@ def candidate_functions(k: int, track_slots: bool = False) -> CandidateFunctions
         def add(candidates: wp.ref[storage], score: float, index: int, slot: int):
             wp.static(insert)(candidates, score, index)
 
-    @wp.func_native("return bvh::knn_worst(candidates);")
-    def limit(candidates: wp.ref[storage]) -> float: ...
+    @wp.func_native("return bvh::knn_limit(candidates, initial);")
+    def limit(candidates: wp.ref[storage], initial: float) -> float: ...
 
     @wp.func_native("bvh::knn_sort(candidates);")
     def sort(candidates: wp.ref[storage]): ...

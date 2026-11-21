@@ -16,7 +16,7 @@ from sengi.queries.knn import bind as bind_knn
 from sengi.queries.nearest import bind as bind_nearest
 from sengi.queries.radius import bind as bind_radius
 from sengi.bvh import Config  # noqa: E402
-from tests.support._oracle import knn_reference
+from tests.support._oracle import assert_knn_ids, knn_reference
 from tests.support._warp_helpers import _closest_triangle  # noqa: E402
 from tests.support.warp_callbacks import (  # noqa: E402
     Balls, BallArrays, ball_evaluate, ball_lower_bound, weighted_callbacks,
@@ -56,20 +56,24 @@ def test_weighted_points_numpy_jit_vmap_and_policy_identity(dimension, cache_bou
 
 
 @pytest.mark.parametrize("k", [1, 3, 9, 65])
-def test_original_id_ties_caps_padding_and_nearest_equivalence(k):
+def test_equal_score_subsets_caps_padding_and_nearest_equivalence(k):
     primitive = Points(2)
     points = np.array([[1, 0], [-1, 0], [0, 1], [0, -1], [3, 0]], np.float32)
     index = bvh.build(primitive, primitive.data(points), config=Config(leaf_size_threshold=1))
     query = bind_knn(index.spec, k, Euclidean())
     queries = np.zeros((3, 2), np.float32)
     caps = np.array([np.nextafter(np.float32(1), np.float32(0)), 1., np.inf], np.float32)
-    expected = knn_reference(np.broadcast_to(np.linalg.norm(points, axis=-1), (3, 5)), k, caps)
+    scores = np.broadcast_to(np.linalg.norm(points, axis=-1), (3, 5))
+    expected = knn_reference(scores, k, caps)
     got = jax.jit(query)(index.data, queries, caps)
-    assert_result(got, expected)
+    assert_knn_ids(scores, got[1], expected[0])
+    for i in (0, 2, 3):
+        np.testing.assert_array_equal(got[i], expected[i])
     if k == 1:
         nearest = bind_nearest(index.spec, Euclidean())(index.data, queries, caps)
         np.testing.assert_array_equal(got[0][..., 0], nearest[1])
-        np.testing.assert_array_equal(got[1][..., 0], nearest[2])
+        assert_knn_ids(scores, nearest[2][:, None], expected[0])
+        np.testing.assert_array_equal(nearest[0][1:], points[np.asarray(nearest[2][1:])])
         np.testing.assert_array_equal(got[3], nearest[3])
 
 
@@ -77,7 +81,7 @@ def test_original_id_ties_caps_padding_and_nearest_equivalence(k):
 def test_extended_primitives_numpy_reference(kind):
     # Parallel segments and right triangles permit direct independent projections.
     x = np.array([3., -2., 1., 0., 5.], np.float32)
-    queries = np.array([[.2, .25, .25], [-1., .1, .2], [4., .3, .1]], np.float32)
+    queries = np.array([[.2, .25, .25], [-1.2, .1, .2], [3.9, .3, .1]], np.float32)
     a = np.column_stack((x, np.zeros((5, 2), np.float32)))
     b = a + np.array([0, 1, 0], np.float32)
     if kind == "segments":
@@ -186,12 +190,14 @@ def test_raw_score_k1_matches_nearest_and_closed_cap():
     result = bind_knn(index.spec, 1, evaluate=evaluate, lower_bound=bound)(index.data, queries, caps)
     nearest = bind_nearest(index.spec, evaluate=evaluate, lower_bound=bound)(index.data, queries, caps)
     np.testing.assert_array_equal(result[0][..., 0], nearest[1])
-    np.testing.assert_array_equal(result[1][..., 0], nearest[2])
+    for ids in (result[1][:, 0], nearest[2]):
+        assert ids[0] == -1 and np.isin(ids[1:], [0, 1]).all()
     np.testing.assert_array_equal(result[3], nearest[3])
     np.testing.assert_array_equal(result[2], [0, 1, 1])
     # The cap is a raw score: 2 excludes score 4, while 4 includes both ties.
     result = bind_knn(index.spec, 3, evaluate=evaluate, lower_bound=bound)(index.data, jnp.zeros(2), 4.)
-    assert_result(result, (np.array([4., 4., np.inf]), np.array([0, 1, -1]), 2, 1))
+    assert_knn_ids([4., 4., 25.], result[1], np.array([4., 4., np.inf]))
+    assert_result((result[0], *result[2:]), (np.array([4., 4., np.inf]), 2, 1))
 
 
 def test_euclidean_numerical_overflow_matches_nearest_validity():
@@ -351,17 +357,18 @@ def test_triangle_vertex_score_rounds_once_at_midpoint():
     args = index.data, np.zeros((2, 3), np.float32), np.array([1., np.inf], np.float32)
     point, distance, ids, status = map(np.asarray, bind_nearest(index.spec, metric)(*args))
     # The FP32 nearest kernel can round all three vertex scores to 1.
-    np.testing.assert_array_equal(ids, [0, 0])
+    assert np.isin(ids, [0, 1, 2]).all()
     np.testing.assert_array_equal(point, corners[ids])
     np.testing.assert_array_equal(distance, [1., 1.])
     np.testing.assert_array_equal(status, [1, 1])
-    np.testing.assert_array_equal(bind_knn(index.spec, 3, metric)(*args)[1],
-                                  [[2, -1, -1], [0, 1, 2]])
+    capped, uncapped = np.asarray(bind_knn(index.spec, 3, metric)(*args)[1])
+    np.testing.assert_array_equal(capped, [2, -1, -1])
+    assert uncapped[0] == 2 and set(uncapped[1:]) == {0, 1}
     np.testing.assert_array_equal(bind_radius(index.spec, metric, mode="count")(*args)[0], [1, 3])
 
 
 @pytest.mark.parametrize("k", [1, 2, 65])
-def test_distinct_scores_with_equal_emitted_distances_use_original_ids(k):
+def test_distinct_scores_rank_before_rounding_to_reported_distance(k):
     primitive = Points(2)
     points = np.array([[1., 3.5e-4], [-1., 0.]], np.float32)
     scores = np.sum(points * points, axis=1)
@@ -370,9 +377,9 @@ def test_distinct_scores_with_equal_emitted_distances_use_original_ids(k):
     index = bvh.build(primitive, primitive.data(points), config=Config(leaf_size_threshold=1))
     args = index.data, np.zeros(2, np.float32)
     point, distance, item, status = bind_nearest(index.spec)(*args)
-    np.testing.assert_array_equal(point, points[0])
-    assert (float(distance), int(item), int(status)) == (1., 0, 1)
+    np.testing.assert_array_equal(point, points[1])
+    assert (float(distance), int(item), int(status)) == (1., 1, 1)
     distances, ids, count, status = bind_knn(index.spec, k)(*args)
-    np.testing.assert_array_equal(ids[:count], np.arange(min(2, k)))
+    np.testing.assert_array_equal(ids[:count], [1, 0][:min(2, k)])
     np.testing.assert_array_equal(distances[:count], 1.)
     assert int(status) == 1

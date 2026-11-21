@@ -53,12 +53,13 @@ can cross JIT and vmap boundaries.
 
 Ordinary candidate queries use status `1` for a match, `0` for a miss and
 `-1` for invalid inputs or traversal failure. Ray intervals and distance caps
-are closed. Use `exclude=True` when binding ray queries that take an
+are closed. A first-hit ray may return any face at the earliest hit time. Use `exclude=True` when binding ray queries that take an
 `exclude_face`. An all-hit query returns the full count even when capacity is
 insufficient, with status `-2` for truncation. kNN specializes on a positive
 static `k` and pads with infinite values and ID `-1`. Nearest, kNN and radius
-use Euclidean distance by default. Nearest and kNN rank equally valued
-results by original primitive ID. Custom metrics can define the units of
+use Euclidean distance by default. Nearest and kNN rank by internal metric score before conversion to the
+reported distance. Any equally scoring primitive can win. kNN can return any
+tied subset in any order within that score. Custom metrics can define the units of
 the score and cap.
 Exact region queries use `point_region_policy`, `segment_region_policy`,
 `triangle_region_policy`, or a custom `RegionIntersectionPolicy` from
