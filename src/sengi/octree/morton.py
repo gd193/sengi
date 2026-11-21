@@ -172,7 +172,8 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
     tree_depth)`.
     """
     n = int(prim_lo_np.shape[0])
-    assert n >= 1, "Need at least one primitive"
+    if n == 0:
+        raise ValueError("host tree builders require at least one primitive")
 
     centroids = (0.5 * (prim_lo_np + prim_hi_np)).astype(np.float32)
     bmin = centroids.min(axis=0)
@@ -430,7 +431,6 @@ def build(lower: ArrayLike, upper: ArrayLike, config: Config | None = None) -> O
     """Build a Morton octree payload from arrays of primitive bounds with shape (N, 3)."""
     config = config if config is not None else Config()
     prim_lo_np, prim_hi_np = _validated_bounds(lower, upper)
-    leaf_size = max(1, int(config.leaf_size_threshold)
-                    if config.leaf_size_threshold else 8)
+    leaf_size = config.leaf_size_threshold
     payload, _ = _build_payload(prim_lo_np, prim_hi_np, leaf_size)
     return payload

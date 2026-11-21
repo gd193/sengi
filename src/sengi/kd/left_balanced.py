@@ -134,7 +134,8 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray
                    ) -> KdPayload:
     """Host-side kd-tree build. Returns a `KdPayload` with jnp arrays."""
     n = int(prim_lo_np.shape[0])
-    assert n >= 1, "Need at least one primitive"
+    if n == 0:
+        raise ValueError("host tree builders require at least one primitive")
 
     # Build over centroids (note: adaptation step 1).
     centroids = (0.5 * (prim_lo_np + prim_hi_np)).astype(np.float32)

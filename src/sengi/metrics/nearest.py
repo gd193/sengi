@@ -59,7 +59,6 @@ class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
              ops: NearestOps[QueryT, ItemT, PointT]) -> WarpFunction[[QueryT, ItemT], bool]: ...
 
 
-MetricSpec = NearestPolicy
 
 
 @wp.func_native("return bvh::conservative_box_score(query, lower, upper);")

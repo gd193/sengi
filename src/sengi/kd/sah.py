@@ -350,7 +350,8 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray
     stack.
     """
     n = int(prim_lo_np.shape[0])
-    assert n >= 1, "Need at least one primitive"
+    if n == 0:
+        raise ValueError("host tree builders require at least one primitive")
 
     # Note step build:1 — default max depth (PBRT-v4 default formula).
     max_depth = int(round(8 + 1.3 * math.log2(max(n, 1))))

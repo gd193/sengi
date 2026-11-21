@@ -26,15 +26,6 @@ def triangle_boundary_features(indices):
     return np.sort(indices[:, [[0, 1], [1, 2], [2, 0]]].reshape(-1, 2), axis=1)
 
 
-def triangle_mesh_closed(vertices, faces):
-    """Packed-layout closure: source-coordinate degeneracy and edge incidence."""
-    _, _, lengths = triangle_metadata(vertices[faces])
-    if np.any(lengths == 0.0):
-        return False
-    _, counts = np.unique(triangle_boundary_features(faces), axis=0, return_counts=True)
-    return bool(np.all(counts == 2))
-
-
 def reduce_nodes(primitive, left, right, offset, count, postorder, combine):
     """Reduce leaf-order values on an already validated binary tree.
 

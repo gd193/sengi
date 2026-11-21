@@ -22,7 +22,7 @@ sys.meta_path.insert(0, BlockWarpImports())
 import jax
 import jax.numpy as jnp
 import numpy as np
-from sengi.bvh import build_lbvh, build_sah
+from sengi.bvh import Config, build_lbvh, build_sah
 from sengi.kd import build_left_balanced, build_sah as build_kd_sah
 from sengi.octree import build_morton_explicit
 
@@ -31,11 +31,15 @@ lower = jnp.asarray([[0., 0., 0.]], dtype=jnp.float32)
 upper = jnp.asarray([[1., 1., 0.]], dtype=jnp.float32)
 for build in (build_lbvh, build_sah, build_left_balanced,
               build_kd_sah, build_morton_explicit):
+    with np.testing.assert_raises_regex(ValueError, "at least one primitive"):
+        build(lower[:0], upper[:0])
     payload = build(lower, upper)
     assert int(payload.root) == 0
     np.testing.assert_array_equal(payload.prim_ids, [0])
     np.testing.assert_array_equal(payload.node_lower, [[0., 0., 0.]])
     np.testing.assert_array_equal(payload.node_upper, [[1., 1., 0.]])
+unit = np.eye(3, dtype=np.float32)
+assert build_sah(unit, unit, Config(leaf_size_threshold=1)).node_leaf_count.max() == 1
 assert "warp" not in sys.modules
 '''
     env = dict(os.environ, JAX_PLATFORMS="cpu",

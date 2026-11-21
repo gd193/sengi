@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from sengi.boundary.metadata import (
-    reduce_nodes, triangle_boundary_features, triangle_mesh_closed, triangle_metadata,
+    reduce_nodes, triangle_boundary_features, triangle_metadata,
 )
 
 
@@ -24,24 +24,34 @@ def test_triangle_metadata_uses_indexed_vertices():
         np.testing.assert_allclose(area, np.array(expected_lengths) / 2, atol=0, rtol=1e-15)
 
 
+def _closed(vertices, faces):
+    from sengi import bvh
+    from sengi.primitives import Triangles
+
+    primitive = Triangles()
+    source = primitive.indexed(vertices, faces)
+    boundary = bvh.prepare_boundary(bvh.build(primitive, source), source, silhouettes=False)
+    return bool(boundary.core.closed.item())
+
+
 def test_empty_metadata_and_closure():
     empty = np.empty((0, 3), np.float32)
     normal, area, lengths = triangle_metadata(np.empty((0, 3, 3), np.float32))
     assert normal.shape == (0, 3)
     assert area.shape == lengths.shape == (0,)
-    assert triangle_mesh_closed(empty, np.empty((0, 3), np.int32))
+    assert _closed(empty, np.empty((0, 3), np.int32))
 
 
 def test_closure_open_closed_degenerate_and_tiny():
     vertices = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], np.float32)
     faces = np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]], np.int32)
-    assert triangle_mesh_closed(vertices, faces)
-    assert triangle_mesh_closed(vertices * np.float32(1e-20), faces)
+    assert _closed(vertices, faces)
+    assert _closed(vertices * np.float32(1e-20), faces)
     mixed = np.array([[-2**25, -2**25, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], np.float32)
-    assert triangle_mesh_closed(mixed, faces)
-    assert not triangle_mesh_closed(vertices, faces[:-1])
+    assert _closed(mixed, faces)
+    assert not _closed(vertices, faces[:-1])
     vertices[3] = vertices[0]
-    assert not triangle_mesh_closed(vertices, faces)
+    assert not _closed(vertices, faces)
     np.testing.assert_array_equal(triangle_boundary_features(faces[:1]), [[0, 2], [1, 2], [0, 1]])
 
 

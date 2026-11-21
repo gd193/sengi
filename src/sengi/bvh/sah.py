@@ -20,7 +20,6 @@ _NDIM = 3
 
 # FCPW defaults (bvh.h Bvh<DIM>::buildLBvhCpu / SAH constants).
 _N_BUCKETS = 8
-_LEAF_SIZE_DEFAULT = 4
 _FCPW_BVH_MAX_DEPTH = 64
 _TRAV_COST = np.float32(1.0)
 _ISECT_COST = np.float32(1.0)
@@ -267,7 +266,8 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
     bvh.inl 1-242). Returns a fully-populated shared `BVHPayload`.
     """
     n = int(prim_lo_np.shape[0])
-    assert n >= 1, "Need at least one primitive"
+    if n == 0:
+        raise ValueError("host tree builders require at least one primitive")
 
     # Per-primitive AABBs already provided; centroids are midpoints.
     ref_lo = prim_lo_np.astype(np.float32)
@@ -307,8 +307,5 @@ def build(lower: ArrayLike, upper: ArrayLike, config: Config | None = None) -> B
     """Build a SAH BVH payload from arrays of primitive bounds with shape (N, 3)."""
     config = config if config is not None else Config()
     prim_lo_np, prim_hi_np = _validated_bounds(lower, upper)
-    leaf_size = max(1, int(config.leaf_size_threshold)
-                    if config.leaf_size_threshold else _LEAF_SIZE_DEFAULT)
-    if leaf_size <= 1:
-        leaf_size = _LEAF_SIZE_DEFAULT
+    leaf_size = config.leaf_size_threshold
     return _build_payload(prim_lo_np, prim_hi_np, leaf_size)

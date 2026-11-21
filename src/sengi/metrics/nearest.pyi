@@ -47,7 +47,6 @@ class NearestOps(Generic[QueryT, ItemT, PointT]):
 class NearestPolicy(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[QueryT, ItemT, PointT]: ...
 
-MetricSpec = NearestPolicy
 
 class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT],

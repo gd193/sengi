@@ -240,7 +240,8 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
     """Host-side build: Morton sort, Karras solve, refit. Returns BVHPayload.
     """
     n = int(prim_lo_np.shape[0])
-    assert n >= 1, "Need at least one primitive"
+    if n == 0:
+        raise ValueError("host tree builders require at least one primitive")
 
     # Preserve the original Morton quantization for the host builder.
     with np.errstate(over="ignore", invalid="ignore"):
@@ -308,5 +309,5 @@ def build(lower: ArrayLike, upper: ArrayLike, config: Config | None = None) -> B
     """Build a LBVH payload from arrays of primitive bounds with shape (N, 3)."""
     config = config if config is not None else Config()
     prim_lo_np, prim_hi_np = _validated_bounds(lower, upper)
-    leaf_size = max(1, int(config.leaf_size_threshold))
+    leaf_size = config.leaf_size_threshold
     return _build_payload(prim_lo_np, prim_hi_np, leaf_size)
