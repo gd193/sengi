@@ -3,18 +3,6 @@
 
 namespace bvh {
 
-template <unsigned Dimension, class Item>
-CUDA_CALLABLE inline wp::vec_t<Dimension, float>
-feature_closest(const wp::vec_t<Dimension, float> &query, const Item &item) {
-    if constexpr (Dimension == 2) {
-        return wp::vec2(item.data.feature_a.data[item.index][0],
-                        item.data.feature_a.data[item.index][1]);
-    } else {
-        return closest_segment(query, item.data.feature_a.data[item.index],
-                               item.data.feature_b.data[item.index]);
-    }
-}
-
 template <typename Lower, typename Upper, typename Angles, typename Axes, typename Radii>
 CUDA_CALLABLE inline bool
 cone_may_have_silhouette(const wp::vec3 &p, int node, const Lower &node_lower,

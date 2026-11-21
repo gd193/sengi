@@ -10,9 +10,6 @@ from sengi.warp.contracts import WarpFunction, make_struct
 from sengi.jax.ffi import _flatten_vec_queries
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.primitives.geometry import boxes_overlap
-from sengi.primitives.region import (point2_intersects, point3_intersects,
-                                 segment2_intersects, segment3_intersects,
-                                 triangle3_intersects)
 from sengi.bvh.traversal.policy import make_traversal
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 
@@ -32,26 +29,6 @@ class RegionIntersectionPolicy(Generic[DeviceDataT]):
             raise TypeError("intersection callback must be a decorated Warp function")
 
 
-def point_region_policy(dimension: int) -> RegionIntersectionPolicy:
-    if dimension == 2:
-        return RegionIntersectionPolicy(point2_intersects)
-    if dimension == 3:
-        return RegionIntersectionPolicy(point3_intersects)
-    raise ValueError("points support 2D or 3D")
-
-
-def segment_region_policy(dimension: int) -> RegionIntersectionPolicy:
-    if dimension == 2:
-        return RegionIntersectionPolicy(segment2_intersects)
-    if dimension == 3:
-        return RegionIntersectionPolicy(segment3_intersects)
-    raise ValueError("segments support 2D or 3D")
-
-
-def triangle_region_policy() -> RegionIntersectionPolicy:
-    return RegionIntersectionPolicy(triangle3_intersects)
-
-
 @dataclass(frozen=True)
 class RegionQuery(BoundQuery, Generic[HostDataT, DeviceDataT, PointT]):
     mode: str
@@ -67,7 +44,15 @@ class RegionQuery(BoundQuery, Generic[HostDataT, DeviceDataT, PointT]):
         return result, status
 
 
-def bind(spec, policy: RegionIntersectionPolicy, *, mode="any", count_limit=None,
+def _resolve_policy(primitive, policy):
+    if policy is None:
+        policy = getattr(primitive, "region_policy", None)
+        if policy is None:
+            raise TypeError("exact region queries require a region intersection policy")
+    return policy
+
+
+def bind(spec, policy: RegionIntersectionPolicy | None = None, *, mode="any", count_limit=None,
                 stack_capacity=STACK_CAPACITY, block_dim=256):
     """Count exact hits or test for any exact hit; a limit returns a saturated count."""
     primitive = spec.primitive
@@ -75,6 +60,7 @@ def bind(spec, policy: RegionIntersectionPolicy, *, mode="any", count_limit=None
         raise ValueError("mode must be 'any' or 'count'")
     if count_limit is not None and (mode != "count" or type(count_limit) is not int or not 1 <= count_limit <= 2147483647):
         raise ValueError("count_limit requires count mode and a positive static int32 integer")
+    policy = _resolve_policy(primitive, policy)
     return _make_region(primitive, policy, mode, count_limit, stack_capacity, block_dim)
 
 

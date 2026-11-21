@@ -33,7 +33,7 @@ def test_builtin_native_requirements_follow_owners():
     triangle_headers = set(map(Path, _requirements(bind_nearest(bvh.IndexSpec(Triangles()))).extra_build_dependencies))
     assert root / "primitives/native/triangle_nearest.h" in triangle_headers
     assert root / "primitives/native/triangle_distance.h" in triangle_headers
-    assert root / "queries/native/robin.h" not in triangle_headers
+    assert root / "primitives/native/triangle_robin.h" not in triangle_headers
 
 
 def test_native_result_and_boundary_policies_compose(tmp_path):

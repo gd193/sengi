@@ -20,7 +20,7 @@ from sengi.metrics.nearest import Angular  # noqa: E402
 from sengi.boundary.robin import prepare_robin, prepare_robin_coefficients
 from sengi.boundary.sampling import MeasureOps, prepare_boundary_sample
 from sengi.queries.boundary_sample import RegionOps, bind as bind_boundary_sample
-from sengi.queries.robin_radius import RobinOps, _euclidean_robin, bind as bind_robin_radius
+from sengi.queries.robin_radius import RobinOps, bind as bind_robin_radius
 
 
 def _boundary(dimension, large=False):
@@ -156,7 +156,7 @@ def test_warp_boundary_custom_measure_and_exact_region_membership():
 @pytest.mark.parametrize("dimension", [2, 3])
 def test_warp_robin_dimension_correct_bounds_and_dynamic_coefficients(dimension):
     index, boundary = _boundary(dimension, large=True)
-    query = jax.jit(bind_robin_radius(index.spec, _euclidean_robin(index.spec.primitive)))
+    query = jax.jit(bind_robin_radius(index.spec))
     point = jnp.array([0., 1.] if dimension == 2 else [0., 0., 1.])
     expected = [np.sqrt(2.)*np.exp(.5), np.exp(.25)] if dimension == 2 else [1.5*np.sqrt(3.), 4./3.]
     for coefficient, radius in zip([1., 4., np.inf], [*expected, 1.], strict=True):
@@ -263,7 +263,6 @@ def test_warp_custom_robin_policy_uses_conservative_closest_surface_ball():
 
 def test_bound_boundary_queries_reject_incompatible_data_during_tracing():
     from sengi.queries import classification, region_classify, silhouette, star_radius
-    from sengi.queries.region import triangle_region_policy
 
     triangles, _ = _boundary(3)
     _, segments = _boundary(2)
@@ -271,10 +270,9 @@ def test_bound_boundary_queries_reject_incompatible_data_during_tracing():
     robin = prepare_robin(segments, 0.)
     point = jnp.zeros(3)
     spec = triangles.spec
-    classification_policy = spec.primitive.boundary_adapter.classification(spec.primitive)
     cases = [
         (classification.bind(spec), (segments, point)),
-        (region_classify.bind(spec, triangle_region_policy(), classification_policy), (segments, point, point)),
+        (region_classify.bind(spec), (segments, point, point)),
         (silhouette.bind(spec), (segments, point)),
         (star_radius.bind(spec), (segments, point, 1.)),
         (bind_boundary_sample(spec), (sample, point, 1., point)),

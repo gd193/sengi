@@ -3,11 +3,9 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, overload
 import warp as wp
 from sengi.warp.native import NativeHeaders
-from sengi.warp.contracts import PrimitiveSpec, WarpFunction, WarpType
+from sengi.warp.contracts import WarpFunction, WarpType
 
-H = TypeVar("H")
 D = TypeVar("D")
-I = TypeVar("I")
 P = TypeVar("P")
 S = TypeVar("S")
 M = TypeVar("M")
@@ -44,5 +42,3 @@ class ClassificationOps(Generic[P, D, M]):
     valid: WarpFunction[[M], bool]
     event: WarpFunction[[P, D, int, int, M], int]
     native: NativeHeaders | None = None
-
-def builtin_classification(primitive: PrimitiveSpec[H, D, I, P], metadata_type: WarpType[M]) -> ClassificationOps[P, D, M]: ...

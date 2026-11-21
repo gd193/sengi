@@ -39,10 +39,13 @@ def _triangle_pack(data, ids):
 
 @lru_cache(maxsize=None)
 def Triangles() -> "IndexedBoundaryPrimitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp.vec3, BoundaryCoreData, BoundaryCore, SilhouetteData, SilhouetteMeta, SilhouetteItem3]":
-    from sengi.boundary.data import _builtin_adapter
+    from sengi.primitives.triangle_boundary import boundary_adapter as triangle_boundary_adapter
 
     dimension = 3
     Vec, Data, Payload, Item = wp.vec3, TrianglesData3, TrianglesArrays3, TriangleItem3
+    from sengi.queries.region import RegionIntersectionPolicy
+    from sengi.primitives.region import triangle3_intersects
+
     functions = item_functions("triangles", dimension, Data, Item)
     load, item_bounds = functions.load, functions.bounds
     host_bounds, host_pack = _triangle_bounds, _triangle_pack
@@ -103,6 +106,7 @@ def Triangles() -> "IndexedBoundaryPrimitive[TrianglesArrays3, TrianglesData3, T
 
     return IndexedBoundaryPrimitive(
         dimension=dimension, point_type=Vec, data_type=Data, item_type=Item,
+        region_policy=RegionIntersectionPolicy(as_warp_function(triangle3_intersects)),
         load=load, bounds_of_item=item_bounds, host_bounds=host_bounds, host_pack=host_pack,
         closest_euclidean=as_warp_function(closest),
         score_euclidean_at=as_warp_function(score_at),
@@ -110,5 +114,5 @@ def Triangles() -> "IndexedBoundaryPrimitive[TrianglesArrays3, TrianglesData3, T
         intersect=as_warp_function(intersect),
         group_leaves=True, cache_nearest_bounds=False, name="triangles", payload_type=Payload,
         prepare_indexed=prepare_indexed,
-        boundary_adapter=_builtin_adapter(3), bind_fused_euclidean=bind_fused_euclidean, native=_NATIVE,
+        boundary_adapter=triangle_boundary_adapter(), bind_fused_euclidean=bind_fused_euclidean, native=_NATIVE,
     )

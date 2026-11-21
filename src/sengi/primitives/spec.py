@@ -12,6 +12,7 @@ from sengi.warp.native import NativeHeaders
 
 if TYPE_CHECKING:
     from sengi.boundary.data import BoundaryAdapter
+    from sengi.queries.region import RegionIntersectionPolicy
 
 
 HostDataT = TypeVar("HostDataT")
@@ -39,6 +40,7 @@ class Primitive(Generic[HostDataT, DeviceDataT, ItemT, PointT]):
     intersect: WarpFunction[[Ray, float, float, DeviceDataT, int, bool, bool], wp.vec2] | None = None
     segment_endpoints: WarpFunction[[ItemT], tuple[PointT, PointT]] | None = None
     normal_sides: WarpFunction[[ItemT], tuple[PointT, wp.vec3, wp.vec3]] | None = None
+    region_policy: "RegionIntersectionPolicy[DeviceDataT] | None" = None
     point_bounds: bool = False
     name: str = "primitive"
     payload_type: Any = None

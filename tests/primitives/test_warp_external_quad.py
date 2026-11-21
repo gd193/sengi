@@ -1,5 +1,6 @@
-"""An indexed convex quad extends nearest through the public primitive API."""
+"""An indexed convex quad supplies its own primitive and boundary operations."""
 from sengi import bvh
+from sengi.queries import boundary_sample, classification, region
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
@@ -12,6 +13,8 @@ import pytest
 
 wp = pytest.importorskip("warp")
 
+from sengi.boundary.data import BoundaryAdapter
+from sengi.boundary.sampling import MeasureOps, prepare_boundary_sample
 from sengi.bvh.device_tree import DeviceTree
 from sengi.metrics.nearest import Euclidean
 from sengi.queries.knn import bind as bind_knn
@@ -90,6 +93,8 @@ def test_external_indexed_quads_nearest():
     built_index = bvh.build(primitive, raw, config=Config(leaf_size_threshold=1), builder="lbvh")
     tree, data = built_index.data
     np.testing.assert_array_equal(tree.prim_ids, [1, 0])
+    with pytest.raises(TypeError, match="region intersection policy"):
+        region.bind(built_index.spec)
     with pytest.raises(TypeError, match="intersection"):
         bind_rays(built_index.spec)
 
@@ -118,6 +123,37 @@ def test_external_indexed_quads_nearest():
     args = [device_payload(DeviceTree, tree, device), device_payload(QuadData, data, device)]
     ids, = run_kernel(caller, 1, args, [(1, int)], queries=(nearest,), device=device)
     np.testing.assert_array_equal(ids, [0])
+
+
+@wp.func
+def uniform_parallelogram(quad: Quad, uv: wp.vec2):
+    u, v = quad[1] - quad[0], quad[3] - quad[0]
+    normal = wp.cross(u, v)
+    return quad[0] + uv[0]*u + uv[1]*v, wp.normalize(normal), 1.0/wp.length(normal)
+
+
+def test_external_quad_boundary_sampling():
+    class Core(NamedTuple):
+        primitive_measure: jax.Array
+
+    def prepare(primitive, data):
+        a, b, _, d = jnp.moveaxis(data.vertices[data.indices], 1, 0)
+        return Core(jnp.linalg.norm(jnp.cross(b - a, d - a), axis=1))
+
+    adapter = BoundaryAdapter(prepare, lambda core, src, tree, packed: Core(core.primitive_measure[tree.prim_ids]),
+                              measure=lambda primitive: MeasureOps(uniform_parallelogram))
+    source = QuadArrays(jnp.array([[0., 0., 0.], [2., 0., 0.], [3., 2., 0.], [1., 2., 0.]]),
+                        jnp.array([[0, 1, 2, 3]], jnp.int32))
+    index = bvh.build(PlanarQuads(), source)
+    boundary = bvh.prepare_boundary(index, source, adapter=adapter, silhouettes=False)
+    with pytest.raises(TypeError, match="classification"):
+        classification.bind(index.spec, adapter=adapter)
+    sample = boundary_sample.bind(index.spec, adapter=adapter)
+    point, normal, pdf, face, status = jax.jit(sample)(
+        prepare_boundary_sample(boundary), jnp.zeros(3), 10., jnp.array([0., .25, .75]))
+    np.testing.assert_allclose(point, [1.25, 1.5, 0.])
+    np.testing.assert_array_equal(normal, [0., 0., 1.])
+    assert (float(pdf), int(face), int(status)) == (.25, 0, 1)
 
 
 @wp.func_native("return external_quad::closest(query, item);")

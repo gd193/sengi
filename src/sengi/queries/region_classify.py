@@ -11,7 +11,7 @@ from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 from sengi.queries.classification import bind as bind_classification
 from sengi.bvh.index import IndexSpec
 
-from sengi.queries.region import RegionIntersectionPolicy, bind as bind_region
+from sengi.queries.region import RegionIntersectionPolicy, _resolve_policy, bind as bind_region
 
 HostDataT = TypeVar("HostDataT")
 DeviceDataT = TypeVar("DeviceDataT")
@@ -37,10 +37,16 @@ class RegionClassifyQuery(BoundQuery, Generic[HostDataT, DeviceDataT, PointT, Ho
                            metadata=(boundary.core,))
 
 
-def bind(spec, region_policy: RegionIntersectionPolicy, classify_policy,
-                         *, metadata_host_type=None, stack_capacity=STACK_CAPACITY, block_dim=128):
+def bind(spec, region_policy: RegionIntersectionPolicy | None = None, classify_policy=None,
+                         *, adapter=None, metadata_host_type=None, stack_capacity=STACK_CAPACITY, block_dim=128):
     """Classify a closed box: -1 outside, 0 surface contact, +1 inside."""
     primitive = spec.primitive
+    region_policy = _resolve_policy(primitive, region_policy)
+    if classify_policy is not None and adapter is not None:
+        raise TypeError("supply a classification policy or an adapter")
+    if classify_policy is None:
+        from sengi.boundary.data import _adapter_policy
+        classify_policy = _adapter_policy(primitive, "classification", adapter)
     return _make_region_classify(primitive, region_policy, classify_policy, metadata_host_type=metadata_host_type,
                                  stack_capacity=stack_capacity, block_dim=block_dim)
 

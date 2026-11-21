@@ -6,7 +6,7 @@ from sengi.queries.domain import ClassificationOps
 from sengi.bvh.device_tree import DeviceTree
 from sengi.primitives.points import Points
 from sengi.primitives.data import PointsData3
-from sengi.queries.region import RegionIntersectionPolicy, bind as bind_region, point_region_policy
+from sengi.queries.region import RegionIntersectionPolicy, bind as bind_region
 from sengi.queries.region_classify import bind as bind_region_classify
 from sengi.warp.contracts import warp_func
 from tests.typing.warp_api.real_extension import ExternalPoints, ExternalData
@@ -33,7 +33,7 @@ classified = bind_region_classify(bvh.IndexSpec(ExternalPoints()), policy, class
 
 def signatures(tree: DeviceTree, points: PointsData3, data: ExternalData,
                metadata: ExternalMetadata, lower: wp.vec3, upper: wp.vec3) -> None:
-    query = bind_region(bvh.IndexSpec(Points()), point_region_policy(3), mode="count")
+    query = bind_region(bvh.IndexSpec(Points()), mode="count")
     assert_type(query.device(lower, upper, tree, points), tuple[int, int])
     assert_type(external.device(lower, upper, tree, data), tuple[int, int])
     assert_type(classified.device(lower, upper, tree, data, metadata), tuple[int, int])

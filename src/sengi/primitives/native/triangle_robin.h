@@ -1,5 +1,5 @@
 #pragma once
-#include "../../primitives/native/triangle_distance.h"
+#include "triangle_distance.h"
 #include "../../metrics/native/box_distance.h"
 #include "../../bvh/traversal/native/traversal.h"
 

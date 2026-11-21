@@ -1,8 +1,7 @@
 #pragma once
-#include "../../primitives/native/triangle_crossing.h"
+#include "triangle_crossing.h"
 
 namespace bvh {
-
 CUDA_CALLABLE inline int triangle_event(const wp::vec3 &p, const wp::array_t<wp::vec3> &vertices,
                                         const wp::vec3i &ids) {
 
@@ -85,28 +84,10 @@ CUDA_CALLABLE inline int triangle_event(const wp::vec3 &p, const wp::array_t<wp:
     return 1;
 }
 
-template <unsigned Dimension, class Meta>
-CUDA_CALLABLE inline int classification_event(const wp::vec_t<Dimension, float> &point,
-                                              const Meta &meta, int slot) {
-    if constexpr (Dimension == 2) {
-
-        const wp::vec3 a = meta.vertices.data[meta.indices.data[2 * slot]];
-        const wp::vec3 b = meta.vertices.data[meta.indices.data[2 * slot + 1]];
-        const double ax = double(a[0]) - double(point[0]), ay = double(a[1]) - double(point[1]);
-        const double bx = double(b[0]) - double(point[0]), by = double(b[1]) - double(point[1]);
-        const double cross = cross2(ax, ay, bx, by);
-        if (cross == 0.0 && wp::min(ax, bx) <= 0 && wp::max(ax, bx) >= 0 && wp::min(ay, by) <= 0 &&
-            wp::max(ay, by) >= 0)
-            return 2;
-        if ((ay <= 0 && by > 0) || (by <= 0 && ay > 0))
-            return cross / (by - ay) > 0 ? 1 : 0;
-        return 0;
-
-    } else {
-        const wp::vec3i ids(meta.indices.data[3 * slot], meta.indices.data[3 * slot + 1],
-                            meta.indices.data[3 * slot + 2]);
-        return triangle_event(point, meta.vertices, ids);
-    }
+template <class Meta>
+CUDA_CALLABLE inline int classify_triangle(const wp::vec3 &point, const Meta &meta, int slot) {
+    const wp::vec3i ids(meta.indices.data[3 * slot], meta.indices.data[3 * slot + 1],
+                        meta.indices.data[3 * slot + 2]);
+    return triangle_event(point, meta.vertices, ids);
 }
-
 } // namespace bvh

@@ -247,8 +247,6 @@ def test_equivalent_static_policies_reuse_kernel(case):
     from sengi.queries.robin_radius import bind as bind_robin_radius
     from sengi.queries.overlap import bind as bind_overlap
     from sengi.boundary.data import resolve_boundary_adapter
-    from sengi.boundary.sampling import _uniform_measure
-    from sengi.queries.robin_radius import _euclidean_robin
 
     class DelegatingMetric:
         def bind(self, primitive):
@@ -266,9 +264,9 @@ def test_equivalent_static_policies_reuse_kernel(case):
     elif mode == "classify":
         explicit = bind_classification(bvh.IndexSpec(primitive), resolve_boundary_adapter(primitive).classification(primitive))
     elif mode == "sample":
-        explicit = bind_boundary_sample(bvh.IndexSpec(primitive), _uniform_measure(primitive))
+        explicit = bind_boundary_sample(bvh.IndexSpec(primitive), primitive.boundary_adapter.measure(primitive))
     elif mode == "robin":
-        explicit = bind_robin_radius(bvh.IndexSpec(primitive), _euclidean_robin(primitive))
+        explicit = bind_robin_radius(bvh.IndexSpec(primitive), primitive.boundary_adapter.robin(primitive))
     elif mode == "overlap":
         explicit = bind_overlap(bvh.IndexSpec(replace(primitive, name="same_math")))
     else:

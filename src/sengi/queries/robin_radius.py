@@ -1,12 +1,11 @@
 """Robin radius traversal and conservative callback policies."""
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any, Generic, Protocol, TypeVar
 
 import jax.numpy as jnp
 import warp as wp
 
-from sengi.warp.native import NativeHeaders, package_headers
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.data import _adapter_policy, _check_functions
 from sengi.boundary.robin import CoefficientMeta
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
@@ -69,124 +68,6 @@ class RobinMetric(Protocol[D, ItemT, PointContra, Q, CD, FD]):
     """Optional static metric capability for conservative Robin policies."""
 
     def bind_robin(self, primitive): ...
-
-
-_ROBIN_HEADERS = package_headers(
-    "queries", "robin.h", "silhouette.h",
-    include_owners=("boundary",),
-    dependencies=("primitives/native/triangle_distance.h", "primitives/native/determinant.h",
-                  "metrics/native/box_distance.h", "metrics/native/rounding.h",
-                  "primitives/native/segment_distance.h"),
-)
-_ROBIN_2D_HEADERS = package_headers(
-    "boundary", "silhouette.h",
-    dependencies=("primitives/native/segment_distance.h",),
-)
-
-
-@lru_cache(maxsize=None)
-def _euclidean_robin(primitive):
-    from sengi.boundary.data import BoundaryCore, SilhouetteMeta, cone_visibility
-
-    Vec, dimension = primitive.point_type, primitive.dimension
-    Geometry = primitive.data_type
-    nearest = Euclidean().bind(primitive)
-    leaf_with_data = visit = bound_with_data = primitive_bound = None
-
-    @wp.func
-    def valid(query: Vec):
-        return wp.isfinite(query)
-
-    @wp.func
-    def node_bound(query: Vec, lower: wp.vec3, upper: wp.vec3, coefficients: wp.vec2):
-        return wp.static(nearest.node_bound)(query, lower, upper)
-
-    if dimension == 3:
-        @wp.func_native("return bvh::robin_leaf(query, geometry, core, coefficients, offset, count, best);")
-        def leaf_with_data(query: Vec, geometry: Geometry, core: BoundaryCore,
-                           coefficients: CoefficientMeta, offset: int, count: int, best: float) -> float: ...
-
-        @wp.func_native("bvh::robin_node(query, feature, meta, node, lower, upper, best, score, bound, skip, accepted);")
-        def visit_values(query: Vec, tree: DeviceTree, geometry: Geometry, core: BoundaryCore,
-                         feature: SilhouetteMeta, meta: CoefficientMeta, node: int,
-                         lower: wp.vec3, upper: wp.vec3, best: float, score: wp.ref[float], bound: wp.ref[float],
-                         skip: wp.ref[bool], accepted: wp.ref[bool]): ...
-
-        @wp.func
-        def visit(query: Vec, tree: DeviceTree, geometry: Geometry, core: BoundaryCore,
-                  feature: SilhouetteMeta, meta: CoefficientMeta, node: int,
-                  lower: wp.vec3, upper: wp.vec3, best: float):
-            score, bound, skip, accepted = float(0.0), float(best), bool(False), bool(False)
-            visit_values(query, tree, geometry, core, feature, meta, node, lower, upper, best, score, bound, skip, accepted)
-            return score, bound, skip, accepted
-    else:
-        @wp.func
-        def bound_with_data(query: Vec, tree: DeviceTree, geometry: Geometry, core: BoundaryCore,
-                            feature: SilhouetteMeta, meta: CoefficientMeta, node: int):
-            lower, upper = tree.node_lower[node], tree.node_upper[node]
-            box2 = node_bound(query, lower, upper, meta.node_bounds[node])
-            point = wp.vec3(query[0], query[1], 0.0)
-            coefficient = meta.node_bounds[node][1]
-            if coefficient == 0.0:
-                return wp.where(cone_visibility(point, tree, feature, node), box2, wp.inf)
-            angles = feature.node_cone_sin_cos[node]
-            if angles[0] < 0.0 or angles[1] <= 0.0 or wp.isinf(coefficient):
-                return box2
-            view = .5*(lower+upper)-point
-            axis = feature.node_cone_axis[node]
-            projection = wp.dot(axis, view)
-            extent = .5*(upper-lower)
-            gap = wp.abs(projection)-wp.dot(wp.abs(axis), extent)
-            if gap <= 0.0:
-                return box2
-            radius = feature.node_cone_radius[node]
-            h = gap*angles[1]-angles[0]*(wp.length(view-projection*axis)+radius)-4e-6*(wp.length(view)+radius)
-            if not (h > 0.0 and wp.isfinite(h)):
-                return box2
-            far = wp.max(wp.abs(lower-point), wp.abs(upper-point))
-            distance2 = wp.clamp(2.0*(h/coefficient), box2, wp.dot(far, far))
-            bound = distance2*wp.exp(2.0*h/(coefficient*distance2))*0.999996
-            return wp.max(box2, bound)
-
-        @wp.func
-        def primitive_bound(query: Vec, item: Any, coefficient: float):
-            if coefficient == 0.0:
-                return wp.inf
-            closest, near2 = wp.static(nearest.closest)(query, item)
-            if not wp.isfinite(near2):
-                return wp.nan
-            if wp.isinf(coefficient) or near2 == 0.0:
-                return near2
-            edge = item.b-item.a
-            normal = Vec(edge[1], -edge[0])/wp.length(edge)
-            height = wp.abs(wp.dot(query-item.a, normal))
-            if height == 0.0:
-                return near2
-            a, b = query-item.a, query-item.b
-            far2 = wp.max(wp.dot(a, a), wp.dot(b, b))
-            distance2 = wp.clamp(2.0*(height/coefficient), near2, far2)
-            bound = distance2*wp.exp(2.0*height/(coefficient*distance2))*0.999996
-            return wp.max(near2, bound)
-
-    @wp.func
-    def feature_bound(query: Vec, a: wp.vec3, b: wp.vec3, n0: wp.vec3, n1: wp.vec3):
-        point = wp.vec3(0.0)
-        for j in range(wp.static(dimension)):
-            point[j] = query[j]
-        view, edge = point-a, b-a
-        side0, side1 = wp.dot(view, n0), wp.dot(view, n1)
-        if (side0 < 0.0 and side1 < 0.0) or (side0 > 0.0 and side1 > 0.0):
-            return wp.inf
-        t, denominator = float(0.0), wp.dot(edge, edge)
-        if denominator > 0.0:
-            t = wp.clamp(wp.dot(view, edge)/denominator, 0.0, 1.0)
-        delta = point-a-t*edge
-        return wp.dot(delta, delta)
-
-    return RobinOps(Vec, (dimension,), valid, node_bound, primitive_bound, feature_bound, bound_with_data,
-                    to_score=nearest.to_score, to_distance=nearest.to_distance,
-                    leaf_bound_with_data=leaf_with_data, node_visit=visit,
-                    native=_ROBIN_HEADERS if dimension == 3 else _ROBIN_2D_HEADERS)
 
 
 @dataclass(frozen=True)

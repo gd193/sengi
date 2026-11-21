@@ -44,7 +44,8 @@ can cross JIT and vmap boundaries.
 | `queries.rays.bind(spec, "count")` | index data, origin, direction, optional maximum and minimum parameter | count, status |
 | `queries.rays.bind(spec, "all")` | index data, origin, direction, optional maximum and minimum parameter, static `max_hits` | times, IDs, full count, status |
 | `queries.overlap.bind(spec)` | index data, box lower and upper corners | primitive-AABB overlap, status |
-| `queries.region.bind(spec, policy)` | index data, box lower and upper corners | exact geometric overlap, status |
+| `queries.region.bind(spec)` | index data, box lower and upper corners | exact geometric overlap, status |
+| `queries.region_classify.bind(spec)` | boundary metadata, box lower and upper corners | box classification, status |
 | `queries.classification.bind(spec)` | boundary metadata, points | sign, status |
 | `queries.silhouette.bind(spec)` | boundary metadata, points, optional distance cap | point, distance, feature ID, status |
 | `queries.star_radius.bind(spec)` | boundary metadata, points, cap | radius, status |
@@ -61,11 +62,21 @@ use Euclidean distance by default. Nearest and kNN rank by internal metric score
 reported distance. Any equally scoring primitive can win. kNN can return any
 tied subset in any order within that score. Custom metrics can define the units of
 the score and cap.
-Exact region queries use `point_region_policy`, `segment_region_policy`,
-`triangle_region_policy`, or a custom `RegionIntersectionPolicy` from
-`sengi.queries.region`.
+Exact region queries bind the primitive’s `region_policy`. Pass a
+`RegionIntersectionPolicy` explicitly to override it. Closed-box classification
+combines that operation with the boundary provider’s point classification.
 
 ## Indexed boundaries
+
+A boundary provider supplies the primitive's classification, silhouette features,
+sampling measure and Robin bounds. A query binds the operation supplied by the
+provider. Two primitives with 3D coordinates can therefore use different
+geometry and metadata in the same query. For example, an indexed quad can
+sample its surface using its own area measure. `PrimitiveSpec` requires the
+build and item-access operations. Each query checks its additional operations
+when bound. A sampling-only boundary adapter is valid. Binding classification
+to it raises `TypeError`. With an indexed triangle provider, classification
+binds successfully and reports status `-1` for an open mesh.
 
 Pass the same indexed source used to build the BVH to
 `bvh.prepare_boundary`. The prepared boundary holds the packed index data alongside its adjacency and core attributes. Pass it directly to boundary queries.

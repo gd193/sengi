@@ -23,7 +23,7 @@ from sengi.queries.overlap import bind as bind_overlap
 from sengi.queries.radius import bind as bind_radius
 from sengi.queries.rays import bind as bind_rays
 from sengi.queries.region import (
-    RegionIntersectionPolicy, bind as bind_region, point_region_policy, segment_region_policy, triangle_region_policy,
+    RegionIntersectionPolicy, bind as bind_region,
 )
 from sengi.queries.region_classify import bind as bind_region_classify
 from tests.support._warp_device import device_payload, run_kernel  # noqa: E402
@@ -37,10 +37,9 @@ def test_points_random_count_limit_empty_invalid_and_jit():
     lo = rng.uniform(-2, 1, (31, 3)).astype(np.float32)
     hi = lo + rng.uniform(0, 1, (31, 3)).astype(np.float32)
     oracle = np.all((lo[:, None] <= points) & (points <= hi[:, None]), axis=2).sum(axis=1)
-    policy = point_region_policy(3)
-    count = bind_region(index.spec, policy, mode="count")
-    any_query = bind_region(index.spec, policy)
-    limited = bind_region(index.spec, policy, mode="count", count_limit=2)
+    count = bind_region(index.spec, mode="count")
+    any_query = bind_region(index.spec)
+    limited = bind_region(index.spec, mode="count", count_limit=2)
     for query, expected in ((count, oracle), (any_query, oracle > 0),
                             (limited, np.minimum(oracle, 2))):
         result, status = jax.jit(query)(index.data, lo, hi)
@@ -55,13 +54,13 @@ def test_points_random_count_limit_empty_invalid_and_jit():
     _, status = count(index.data, bad_lo, bad_hi)
     np.testing.assert_array_equal(status, -1)
     with pytest.raises(ValueError, match="count_limit"):
-        bind_region(index.spec, policy, mode="count", count_limit=0)
+        bind_region(index.spec, mode="count", count_limit=0)
 
 
 def test_point2_closed_box_contact():
     primitive = Points(2)
     index = bvh.build(primitive, primitive.data(np.array([[0, 0], [1, 1]], np.float32)))
-    q = bind_region(index.spec, point_region_policy(2), mode="count")
+    q = bind_region(index.spec, mode="count")
     result, status = q(index.data,
                        np.array([[0, 0], [.25, .25]], np.float32),
                        np.array([[0, 0], [.75, .75]], np.float32))
@@ -75,7 +74,7 @@ def test_segment_exact_contacts_degenerate_and_scales():
         a = np.array([[-1, 1], [0, 0], [3, 3]], np.float32) * scale
         b = np.array([[1, -1], [0, 0], [3, 3]], np.float32) * scale
         index = bvh.build(primitive, primitive.data(a, b))
-        q = bind_region(index.spec, segment_region_policy(2), mode="count")
+        q = bind_region(index.spec, mode="count")
         lo = np.array([[0, 0], [.5, .5], [3, 3]], np.float32) * scale
         hi = np.array([[0, 0], [.6, .6], [3, 3]], np.float32) * scale
         result, status = q(index.data, lo, hi)
@@ -88,7 +87,7 @@ def test_segment3_closed_faces_and_bbox_false_positive():
     a = np.array([[-1, 1, 1], [0, 0, 0]], np.float32)
     b = np.array([[1, -1, -1], [0, 0, 0]], np.float32)
     index = bvh.build(primitive, primitive.data(a, b))
-    q = bind_region(index.spec, segment_region_policy(3), mode="count")
+    q = bind_region(index.spec, mode="count")
     lo = np.array([[0, 0, 0], [.5, .5, .5], [0, 0, 0]], np.float32)
     hi = np.array([[0, 0, 0], [.6, .6, .6], [0, 0, 0]], np.float32)
     result, status = q(index.data, lo, hi)
@@ -100,7 +99,7 @@ def test_triangle_exact_not_just_bounding_box():
     primitive = Triangles()
     vertices = np.array([[0, 0, 0], [2, 0, 0], [0, 2, 0]], np.float32)
     index = bvh.build(primitive, primitive.indexed(vertices, [[0, 1, 2]]))
-    q = bind_region(index.spec, triangle_region_policy())
+    q = bind_region(index.spec)
     lo = np.array([[1.5, 1.5, -.1], [.2, .2, 0], [2, 0, 0],
                    [0, 0, .1], [0, 0, 0]], np.float32)
     hi = np.array([[1.6, 1.6, .1], [.3, .3, 0], [2, 0, 0],
@@ -139,7 +138,7 @@ def test_indexed_triangle_contact_at_original_vertices(far, near):
     reconstructed = facets[:, 0] + (facets[:, 1] - facets[:, 0])
     boxes = np.concatenate((vertices, reconstructed))
     for mode in ("any", "count"):
-        hit, status = run(bind_region(index.spec, triangle_region_policy(), mode=mode), boxes, boxes)
+        hit, status = run(bind_region(index.spec, mode=mode), boxes, boxes)
         np.testing.assert_array_equal(hit, np.r_[np.ones(len(vertices)), np.zeros(len(facets))])
         np.testing.assert_array_equal(status, 1)
     hit, _ = run(bind_overlap(index.spec), vertices, vertices)
@@ -195,7 +194,7 @@ def test_triangle_scaled_boxes(scale, shift):
     primitive = Triangles()
     vertices = np.array([[0, 0, 0], [2, 0, 0], [0, 2, 0]], np.float32) * scale + shift
     index = bvh.build(primitive, primitive.indexed(vertices, [[0, 1, 2]]))
-    q = bind_region(index.spec, triangle_region_policy())
+    q = bind_region(index.spec)
     lo = np.array([[.2, .2, -.1], [1.5, 1.5, -.1]], np.float32) * scale + shift
     hi = np.array([[.3, .3, .1], [1.6, 1.6, .1]], np.float32) * scale + shift
     result, status = q(index.data, lo, hi)
@@ -209,8 +208,7 @@ def test_closed_surface_inside_outside_intersects():
     source = primitive.indexed(mesh.vertices, mesh.faces)
     index = bvh.build(primitive, source)
     boundary = bvh.prepare_boundary(index, source, silhouettes=False)
-    classify_policy = primitive.boundary_adapter.classification(primitive)
-    q = bind_region_classify(index.spec, triangle_region_policy(), classify_policy,
+    q = bind_region_classify(index.spec,
                              metadata_host_type=type(boundary.core))
     lo = np.array([[0, 0, 0], [2, 2, 2], [.9, 0, 0], [1, 0, 0]], np.float32)
     hi = np.array([[.1, .1, .1], [2.1, 2.1, 2.1], [1.1, .1, .1], [1, 0, 0]], np.float32)
@@ -222,7 +220,7 @@ def test_closed_surface_inside_outside_intersects():
     invalid_result, invalid_status = q(replace(boundary, core=invalid_core), lo, hi)
     np.testing.assert_array_equal(invalid_status, -1)
     np.testing.assert_array_equal(invalid_result, 0)
-    assert bind_region_classify(bvh.IndexSpec(primitive), triangle_region_policy(), classify_policy,
+    assert bind_region_classify(bvh.IndexSpec(primitive),
                                metadata_host_type=type(boundary.core)) is q
     with pytest.raises(TypeError, match="boundary core.*BoundaryCoreData"):
         q(replace(boundary, core=boundary.core._asdict()), lo, hi)

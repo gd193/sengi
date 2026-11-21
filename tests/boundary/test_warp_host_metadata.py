@@ -2,9 +2,8 @@
 import numpy as np
 import pytest
 
-from sengi.boundary.metadata import (
-    reduce_nodes, triangle_boundary_features, triangle_metadata,
-)
+from sengi.boundary.metadata import reduce_nodes
+from sengi.primitives.triangle_boundary import triangle_boundary_features, triangle_metadata
 
 
 def test_triangle_metadata_uses_indexed_vertices():

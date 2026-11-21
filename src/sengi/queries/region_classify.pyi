@@ -9,7 +9,7 @@ from sengi.warp.contracts import PrimitiveSpec, WarpFunction
 from sengi.warp.launch import BoundQuery
 from sengi.queries.domain import ClassificationOps
 from sengi.bvh.device_tree import DeviceTree
-from sengi.boundary.data import BoundaryData
+from sengi.boundary.data import BoundaryAdapter, BoundaryData, BoundaryPrimitive
 from sengi.bvh.index import IndexSpec
 
 from sengi.queries.region import RegionIntersectionPolicy
@@ -31,15 +31,28 @@ class RegionClassifyQuery(BoundQuery, Generic[HostDataT, DeviceDataT, PointT, Ho
 
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
-                         region_policy: RegionIntersectionPolicy[DeviceDataT],
+                         region_policy: RegionIntersectionPolicy[DeviceDataT] | None,
                          classify_policy: ClassificationOps[PointT, DeviceDataT, MetaT], *,
                          metadata_host_type: type[HostMetaT],
                          stack_capacity: int = ..., block_dim: int = ...
                          ) -> RegionClassifyQuery[HostDataT, DeviceDataT, PointT, HostMetaT, MetaT]: ...
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
-                         region_policy: RegionIntersectionPolicy[DeviceDataT],
+                         region_policy: RegionIntersectionPolicy[DeviceDataT] | None,
                          classify_policy: ClassificationOps[PointT, DeviceDataT, MetaT], *,
                          metadata_host_type: None = ...,
                          stack_capacity: int = ..., block_dim: int = ...
                          ) -> RegionClassifyQuery[HostDataT, DeviceDataT, PointT, MetaT, MetaT]: ...
+
+
+@overload
+def bind(spec: IndexSpec[BoundaryPrimitive[HostDataT, DeviceDataT, ItemT, PointT, HostMetaT, MetaT, Any, Any, Any]],
+         region_policy: RegionIntersectionPolicy[DeviceDataT] | None = ..., classify_policy: None = ..., *,
+         metadata_host_type: type[HostMetaT] | None = ..., stack_capacity: int = ..., block_dim: int = ...
+         ) -> RegionClassifyQuery[HostDataT, DeviceDataT, PointT, HostMetaT, MetaT]: ...
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+         region_policy: RegionIntersectionPolicy[DeviceDataT] | None = ..., classify_policy: None = ..., *,
+         adapter: BoundaryAdapter[HostDataT, DeviceDataT, ItemT, PointT, HostMetaT, MetaT, Any, Any, Any],
+         metadata_host_type: type[HostMetaT] | None = ..., stack_capacity: int = ..., block_dim: int = ...
+         ) -> RegionClassifyQuery[HostDataT, DeviceDataT, PointT, HostMetaT, MetaT]: ...

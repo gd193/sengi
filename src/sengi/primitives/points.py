@@ -31,6 +31,9 @@ def _points(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]:
         (PointsData2, PointsArrays2, PointItem2) if dimension == 2
         else (PointsData3, PointsArrays3, PointItem3)
     )
+    from sengi.queries.region import RegionIntersectionPolicy
+    from sengi.primitives.region import point2_intersects, point3_intersects
+
     functions = item_functions("points", dimension, Data, Item)
 
     @wp.func
@@ -43,6 +46,7 @@ def _points(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]:
 
     return ArrayPrimitive(
         dimension=dimension, point_type=Vec, data_type=Data, item_type=Item,
+        region_policy=RegionIntersectionPolicy(as_warp_function(point2_intersects if dimension == 2 else point3_intersects)),
         load=functions.load, bounds_of_item=functions.bounds,
         host_bounds=_array_bounds, host_pack=_array_pack,
         closest_euclidean=as_warp_function(closest), segment_endpoints=as_warp_function(endpoints),

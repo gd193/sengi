@@ -52,7 +52,7 @@ src/sengi/
 
 Native headers live in the owning module's `native/` directory. For example,
 triangle projection lives in `primitives/native/triangle_distance.h`, Robin
-radius evaluation in `queries/native/robin.h`, and the binary traversal stack
+radius evaluation for triangles in `primitives/native/triangle_robin.h`, and the binary traversal stack
 in `bvh/traversal/native/traversal.h`. SAH and LBVH produce the same binary
 layout, so a bound query can run on either tree.
 
@@ -63,7 +63,7 @@ Build and install with conda tooling from the repository root.
 ```sh
 mamba create -n spatial-build -c conda-forge rattler-build
 mamba run -n spatial-build rattler-build build --recipe recipe/recipe.yaml -c conda-forge --output-dir "$PWD/output"
-mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.3.2 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
+mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.4.0 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
 mamba run -n spatial-dev python -m pytest tests
 ```
 
