@@ -1,0 +1,170 @@
+# Binary BVH queries
+
+Sengi uses two objects to represent an index. `index.spec` contains the static
+primitive specification and the binary layout. `index.data` is a JAX pytree
+containing topology and leaf-ordered geometry. Bind a query once, then pass
+the data into the bound query. The same specialization works with data built
+by SAH and LBVH when both use the same primitive specification.
+
+```python
+import jax
+import jax.numpy as jnp
+
+from sengi import bvh, queries
+from sengi.metrics.nearest import Euclidean
+from sengi.primitives.points import Points
+
+primitive = Points(3)
+source = primitive.data(jnp.asarray([[0., 0., 0.], [2., 0., 0.]]))
+sah = bvh.build(primitive, source)
+lbvh = bvh.build(primitive, source, builder="lbvh")
+nearest = jax.jit(queries.nearest.bind(sah.spec, Euclidean()))
+
+points = jnp.asarray([[1.5, 0., 0.]])
+point, distance, original_id, status = nearest(sah.data, points)
+point, distance, original_id, status = nearest(lbvh.data, points)
+```
+
+Use `bvh.Config(leaf_size_threshold=...)` to configure leaves. Select
+`builder="lbvh"` to partition in Morton order. Both builders pack geometry
+into leaf order for traversal. Query result IDs refer to the original input.
+Batch points as `(..., D)`, where `D` is the primitive dimension. Caps are
+scalar or match the query batch. Dynamic inputs, including the index arrays,
+can cross JIT and vmap boundaries.
+
+## Query families
+
+| Binding | JAX inputs after index data | Output |
+| --- | --- | --- |
+| `queries.nearest.bind(spec, metric)` | points, optional distance cap | point, value, ID, status |
+| `queries.knn.bind(spec, k, metric)` | points, optional distance cap | values, IDs or points, count, status |
+| `queries.radius.bind(spec, metric, mode="count")` | points, radius | count, status |
+| `queries.rays.bind(spec, "first")` | origin, direction, optional maximum and minimum parameter | time, ID, hit flag, status |
+| `queries.rays.bind(spec, "any")` | origin, direction, optional maximum and minimum parameter | hit flag, status |
+| `queries.rays.bind(spec, "count")` | origin, direction, optional maximum and minimum parameter | count, status |
+| `queries.rays.bind(spec, "all")` | origin, direction, optional maximum and minimum parameter, static `max_hits` | times, IDs, full count, status |
+| `queries.overlap.bind(spec)` | box lower and upper corners | primitive-AABB overlap, status |
+| `queries.region.bind(spec, policy)` | box lower and upper corners | exact geometric overlap, status |
+| `queries.classification.bind(spec)` | boundary metadata, points | sign, status |
+| `queries.silhouette.bind(spec)` | boundary metadata, points, optional distance cap | point, distance, feature ID, status |
+| `queries.star_radius.bind(spec)` | boundary metadata, points, cap | radius, status |
+| `queries.boundary_sample.bind(spec)` | sampling metadata, points, radii, triples of uniform draws | point, normal, PDF, ID, status |
+| `queries.robin_radius.bind(spec)` | Robin metadata, points, optional cap | radius, status |
+
+Ordinary candidate queries use status `1` for a match, `0` for a miss and
+`-1` for invalid inputs or traversal failure. Ray intervals and distance caps
+are closed. Use `exclude=True` when binding ray queries that take an
+`exclude_face`. An all-hit query returns the full count even when capacity is
+insufficient, with status `2` for truncation. kNN specializes on a positive
+static `k` and pads with infinite scores and ID `-1`. Custom metrics can
+define the units of the score and cap. The Euclidean metric reports distance.
+Exact region queries use `point_region_policy`, `segment_region_policy`,
+`triangle_region_policy`, or a custom `RegionIntersectionPolicy` from
+`sengi.queries.region`.
+
+## Indexed boundaries
+
+Pass the same indexed source used to build the BVH to
+`bvh.prepare_boundary`. This prepares adjacency and core attributes.
+The default also prepares silhouette features. Use `silhouettes=False`
+for classification or sampling without silhouette features.
+
+```python
+import jax.numpy as jnp
+
+from sengi import bvh, queries
+from sengi.boundary.robin import prepare_robin
+from sengi.boundary.sampling import prepare_boundary_sample
+from sengi.primitives.triangles import Triangles
+
+primitive = Triangles()
+source = primitive.indexed(
+    [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., 0., 1.]],
+    [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]],
+)
+index = bvh.build(primitive, source)
+boundary = bvh.prepare_boundary(index, source)
+points = jnp.array([[0.1, 0.1, 0.1]])
+
+sign, status = queries.classification.bind(index.spec)(index.data, boundary, points)
+sampling = prepare_boundary_sample(index.data.tree, boundary)
+sample = queries.boundary_sample.bind(index.spec)
+point, normal, pdf, face, status = sample(
+    index.data, sampling, points, jnp.inf, jnp.array([[.2, .3, .4]]),
+)
+robin = prepare_robin(index.data.tree, boundary, minimum=1.0)
+radius, status = queries.robin_radius.bind(index.spec)(index.data, robin, points, 0.5)
+```
+
+Classification uses even-odd parity for closed indexed surfaces. The sign
+is negative inside, positive outside and zero on the boundary. If a
+boundary sample falls outside a restricted query region, the query reports
+a null sample with zero PDF. Robin coefficients can be scalars or arrays in
+source primitive order. Supply an optional maximum for interval bounds.
+Prepare new coefficient metadata when coefficients change and reuse the same
+index data and bound query.
+
+## Extending queries
+
+A custom primitive implements the typed
+`PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]` protocol from
+`sengi.warp.contracts`. It supplies host bounds and a pack operation, the
+device data type, and device callbacks for loading items and accessing item
+bounds. The immutable `Primitive` descriptor from `sengi.primitives.spec`
+accepts these operations directly. Add a geometric callback only when a
+query needs it. Use the concrete item types in `sengi.primitives.items` for
+extensions to built-in primitives. Triangle items expose their original
+vertices through `a`, `b` and `c`.
+
+A nearest metric implements evaluation and a conservative AABB lower bound.
+Use the same units for both. The lower bound must never exceed the score of
+any candidate in its subtree. The `NearestCallbacks` policy packages the
+callbacks and can be passed to nearest, kNN and radius bindings.
+
+```python
+import warp as wp
+
+from sengi import bvh, queries
+from sengi.metrics.nearest import NearestCallbacks
+from sengi.primitives.items import PointItem3
+from sengi.primitives.points import Points
+from sengi.warp.contracts import warp_func
+
+@warp_func
+def evaluate(point: wp.vec3, item: PointItem3) -> tuple[wp.vec3, float]:
+    return item.a, wp.length_sq(point - item.a)
+
+@warp_func
+def lower_bound(point: wp.vec3, lo: wp.vec3, hi: wp.vec3) -> float:
+    delta = wp.max(wp.max(lo - point, wp.vec3(0.0)), point - hi)
+    return wp.length_sq(delta)
+
+primitive = Points(3)
+index = bvh.build(primitive, primitive.data([[0., 0., 0.], [2., 0., 0.]]))
+query = queries.nearest.bind(index.spec, NearestCallbacks(evaluate, lower_bound))
+point, squared_distance, original_id, status = query(index.data, [[1.5, 0., 0.]])
+```
+
+Use `warp_struct` on device payload types and `warp_func` with concrete
+device annotations to retain callback signatures in Python type checking.
+See the [typed extension example](../tests/typing/warp_api/real_extension.py)
+and [typing checks](../tests/typing/check_warp_api.py). For boundary
+extensions, pair a primitive with a `BoundaryAdapter` from
+`sengi.boundary.data` to prepare core and optional feature metadata.
+
+### Calling from Warp kernels
+
+A bound query exposes `query.device`. A nearest call in a kernel takes
+`(point, cap, tree, geometry)` and returns the same four result fields as
+the JAX call. Use the query's `device` callable in `wp.static(...)` and call
+`configure_query_kernel(kernel, query)` from `sengi.warp.device` before
+launch to configure native dependencies. Upload arrays into the device
+structs before launching the kernel. For kNN, allocate dense `(rows, k)`
+value and neighbor arrays and pass them and the row index to the device
+call. Device examples are exercised in the
+[Warp kernel tests](../tests/integration/test_warp_device_queries.py).
+
+For CPU validation set `JAX_PLATFORMS=cpu` before starting Python. GPU
+validation can select a device through `CUDA_VISIBLE_DEVICES`. Set
+`XLA_PYTHON_CLIENT_PREALLOCATE=false` to disable JAX memory preallocation
+when sharing the GPU with Warp or other benchmarks.

@@ -1,6 +1,6 @@
 package:
   name: sengi
-  version: 0.1.0
+  version: 0.2.0
 source:
   path: ..
 build:
@@ -23,5 +23,5 @@ requirements:
     - warp-lang ==1.18.0
 tests:
   - script:
-      - python -c "from sengi import BVHAccelerator"
-      - python -c "from importlib.resources import files; assert (files('sengi') / 'bvh/backends/native/query.h').is_file()"
+      - python -c "from sengi.bvh import IndexSpec"
+      - python -c "from importlib.resources import files; root = files('sengi'); assert all((root / path).is_file() for path in ('bvh/traversal/native/traversal.h', 'primitives/native/triangle_distance.h', 'metrics/native/box_distance.h', 'queries/native/robin.h', 'queries/native/knn_candidates.h'))"
