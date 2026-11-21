@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import RLock
 import linecache
 from itertools import count
-from typing import Any
+from typing import Any, Callable
 
 import warp as wp
 
@@ -29,6 +29,7 @@ class BoundQuery:
     num_outputs: int
     block_dim: int
     device: Any = field(kw_only=True)
+    _check_batch: Callable[[int], None] | None = field(default=None, kw_only=True)
     group_types: tuple = field(default=(), kw_only=True)
     components: tuple[tuple[str, str], ...] = field(default=(), kw_only=True)
 
@@ -49,7 +50,8 @@ class BoundQuery:
         tree.validate_geometry(geometry, self.primitive)
         if len(metadata) != len(self.group_types):
             raise ValueError("query metadata does not match its static schema")
-        call = batched_kernel(self.kernel, self.num_query_args, self.num_outputs, self.block_dim, output_shapes)
+        call = batched_kernel(self.kernel, self.num_query_args, self.num_outputs, self.block_dim,
+                              output_shapes, self._check_batch)
         extra = tuple(a for value, schema in zip(metadata, self.group_types, strict=True)
                       for a in struct_arrays(value, schema))
         values = call(*args, *struct_arrays(tree, DeviceTree), *struct_arrays(geometry, self.primitive.data_type), *extra)

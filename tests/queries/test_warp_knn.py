@@ -133,6 +133,24 @@ def test_empty_invalid_queries_caps_and_shapes():
         query(index.data, jnp.zeros(3))
 
 
+def test_knn_trace_checks_flattened_output_offsets():
+    primitive = Points(2)
+    index = bvh.build(primitive, primitive.data([[0., 0.]]))
+    query = bind_knn(index.spec, 4)
+    limit = 2**29
+    def run(x):
+        return query(index.data, x)
+
+    def shape(*dims):
+        return jax.ShapeDtypeStruct((*dims, 2), jnp.float32)
+
+    assert jax.eval_shape(run, shape(limit))[0].shape == (limit, 4)
+    with pytest.raises(ValueError, match="32-bit indexing"):
+        jax.jit(run).lower(shape(limit + 1))
+    with pytest.raises(ValueError, match="32-bit indexing"):
+        jax.jit(jax.vmap(jax.vmap(run))).lower(shape(2, 2, limit // 4 + 1))
+
+
 @pytest.mark.parametrize("bad_score", [-1., np.inf, np.nan])
 def test_bad_evaluated_score_clears_entire_row(bad_score):
     @wp.func(module="unique")
@@ -161,7 +179,7 @@ def test_stack_failure_clears_row():
     np.testing.assert_array_equal(result[1], -1)
 
 
-@pytest.mark.parametrize("k", [True, False, 0, -1, 1.5, np.int32(2)])
+@pytest.mark.parametrize("k", [True, False, 0, -1, 1.5, np.int32(2), 2**31])
 def test_k_is_positive_static_python_int(k):
     with pytest.raises((TypeError, ValueError)):
         bind_knn(bvh.IndexSpec(Points()), k, Euclidean())

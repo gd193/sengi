@@ -1,5 +1,7 @@
 """Fused generic k-nearest queries with fixed-capacity candidate storage."""
 from dataclasses import dataclass
+from functools import partial
+from operator import index
 from typing import Generic, TypeVar
 
 import jax.numpy as jnp
@@ -48,6 +50,16 @@ class SelectedKnnQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT
     return_points: bool
 
 
+def validate_batch_size(rows: int, k: int) -> None:
+    """Check the Warp row dimension and largest flat output offset before launch."""
+    rows, k = index(rows), index(k)
+    if not 1 <= k < 2**31:
+        raise ValueError("k must fit a positive signed 32-bit integer")
+    if not 0 <= rows < 2**31 or rows * k > 2**31:
+        raise ValueError(f"kNN batch of {rows} rows with k={k} exceeds signed 32-bit indexing. "
+                         "Split the queries into smaller batches.")
+
+
 def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=None,
              stack_capacity=STACK_CAPACITY, block_dim=64, cache_bounds=True,
              packed_nodes=True, group_leaves=None, return_points=False, result_policy=None):
@@ -66,8 +78,7 @@ def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=Non
     primitive = spec.primitive
     if isinstance(k, bool) or not isinstance(k, int):
         raise TypeError("k must be a positive static Python int")
-    if k < 1:
-        raise ValueError("k must be positive")
+    validate_batch_size(1, k)
     if not isinstance(return_points, bool):
         raise TypeError("return_points must be a static Python bool")
     if result_policy is not None and return_points:
@@ -176,7 +187,7 @@ def _make_knn(primitive, k, metric, *, predicate=None,
     QueryClass = SelectedKnnQuery if result_policy is not None else KnnQuery
     options = {"result_policy": result_policy} if result_policy is not None else {}
     return bind_query(QueryClass, "knn_kernel", primitive, inputs, outputs, body, {"knn": knn},
-                       block_dim, device=knn, ops=ops, k=k, return_points=return_points, components=components,
+                       block_dim, device=knn, _check_batch=partial(validate_batch_size, k=k), ops=ops, k=k, return_points=return_points, components=components,
                       native_providers=(ops, metric, predicate, result_policy),
                       native_requirements=(candidate_build_options(candidates, k, return_points or result_policy is not None),),
                       max_unroll=max(16, min(k, REGISTER_LIMIT)), **options)

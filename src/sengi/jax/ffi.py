@@ -37,7 +37,7 @@ def _crossing_args(origin, direction, minimum, maximum, exclude_face, dimension=
 
 
 @lru_cache(maxsize=None)
-def batched_kernel(kernel, num_query_args, num_outputs, block_dim, output_shapes=None):
+def batched_kernel(kernel, num_query_args, num_outputs, block_dim, output_shapes=None, check_batch=None):
     import warp as wp
 
     ffi_call = wp.jax_kernel(kernel, num_outputs=num_outputs,
@@ -45,6 +45,8 @@ def batched_kernel(kernel, num_query_args, num_outputs, block_dim, output_shapes
 
     @jax.custom_batching.custom_vmap
     def selective_call(*args):
+        if check_batch is not None:
+            check_batch(args[0].shape[0])
         dims = None
         if output_shapes is not None:
             dims = {arg.label: (args[0].shape[0],) + shape for arg, shape in

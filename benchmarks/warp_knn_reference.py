@@ -94,9 +94,11 @@ def ours(
     import jax.numpy as jnp
     import warp as wp
     from sengi.metrics.nearest import Euclidean
-    from sengi.queries.knn import bind as bind_knn
+    from sengi.queries.knn import bind as bind_knn, validate_batch_size
     from benchmarks._warp_timing import _make_case, _measure
 
+    n = len(queries)
+    validate_batch_size(n, k)
     index = prepared or prepare_ours(data, leaf)
     ops = Euclidean().bind(index.spec.primitive)
     # Raw callback path returns squared scores, matching both external kernels.
@@ -110,7 +112,6 @@ def ours(
         packed_nodes=packed_nodes,
         group_leaves=group_leaves,
     )
-    n = len(queries)
     inputs = [jnp.asarray(queries), jnp.full((n,), cap, jnp.float32), *jax.tree.leaves(index.data.tree), *index.data.geometry]
     device = wp.device_from_jax(jax.devices()[0])
     case = _make_case(

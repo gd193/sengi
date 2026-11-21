@@ -32,6 +32,8 @@ class SelectedKnnQuery(BoundQuery,
     ops: NearestOps[QueryT, ItemT, PointT]
     k: int
 
+def validate_batch_size(rows: int, k: int) -> None: ...
+
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
              k: int, metric: NearestPolicy[DeviceDataT, ItemT, PointT, QueryT], *,

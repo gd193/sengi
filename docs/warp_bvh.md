@@ -201,7 +201,11 @@ A bound query exposes `query.device`. A nearest call in a kernel takes
 the JAX call. Use the query's `device` callable in `wp.static(...)` and call
 `configure_query_kernel(kernel, query)` from `sengi.warp.device` before
 launch to configure native dependencies. Upload arrays into the device
-structs before launching the kernel. For kNN, allocate dense `(rows, k)`
+structs before launching the kernel. For kNN in a caller-owned Warp kernel, call
+`sengi.queries.knn.validate_batch_size(rows, k)` on the host before launch.
+JAX checks this automatically at trace time, including rows combined by `vmap`.
+The row count must fit a signed 32-bit integer and `rows * k` may be at most
+`2**31`, so the last zero-based offset fits. Allocate dense `(rows, k)`
 value and neighbor arrays and pass them and the row index to the device
 call. Device examples are exercised in the
 [Warp kernel tests](../tests/integration/test_warp_device_queries.py).
