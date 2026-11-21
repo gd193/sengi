@@ -80,7 +80,6 @@ def test_triangle_fused_nearest_respects_replaced_geometry_and_metric():
             return replace(metric.bind(primitive), closest=weighted_vertex, score_at=None, point_at=None)
 
     raw = primitive.indexed([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
-    index = bvh.build(primitive, raw)
     query = np.array([.25, .25, 0.], np.float32)
     # The slot callbacks take precedence until a provider opts out of both.
     modified = replace(primitive, closest_euclidean=first_vertex)
@@ -90,7 +89,8 @@ def test_triangle_fused_nearest_respects_replaced_geometry_and_metric():
          metric, [0., 0., 0.], np.linalg.norm(query)),
         (primitive, CustomMetric(), [0., 0., 0.], 2 * np.linalg.norm(query)),
     ):
-        nearest = bind_nearest(bvh.IndexSpec(provider), policy)
+        index = bvh.build(provider, raw)
+        nearest = bind_nearest(index.spec, policy)
         assert nearest.ops.bind_fused(nearest.ops) is None
         actual = nearest(index.data, query)
         np.testing.assert_array_equal(actual[0], point)

@@ -25,6 +25,6 @@ def invalid(tree: DeviceTree, geometry: PointsData3, point: wp.vec3,
     traversal.device(tree, Context(), WrongState())  # expect: reportArgumentType
     reduction.device(wp.vec2(), 1.0, tree, geometry)  # expect: reportArgumentType
     reduction.device(point, 1.0, tree, point)  # expect: reportArgumentType
-    bind_radius(bvh.IndexSpec(Points()), Euclidean(), mode="all")  # expect: reportArgumentType
-    bind_radius(bvh.IndexSpec(Points()), Euclidean(), mode="accumulate")  # expect: reportArgumentType
+    bind_radius(bvh.IndexSpec(Points()), Euclidean(), mode="all")  # expect: reportArgumentType # expect: reportCallIssue
+    bind_radius(bvh.IndexSpec(Points()), Euclidean(), mode="accumulate")  # expect: reportArgumentType # expect: reportCallIssue
     bind_radius(bvh.IndexSpec(Triangles()), Euclidean(), mode="accumulate", accumulator=accumulator)  # expect: reportCallIssue  # expect: reportArgumentType

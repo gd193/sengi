@@ -1,5 +1,6 @@
 """Boundary events, broad-phase overlap and multi-root custom primitives."""
 from sengi import bvh
+from sengi.boundary.data import BoundaryData
 from collections import namedtuple
 from dataclasses import dataclass, replace
 
@@ -136,7 +137,7 @@ def test_warp_classification_factory_boundary_events(dimension):
         import trimesh
         mesh = trimesh.creation.box(extents=[2., 2., 2.])
         primitive = Triangles()
-        data = primitive.data(mesh.vertices, mesh.faces)
+        data = primitive.indexed(mesh.vertices, mesh.faces)
         points = [[0, 0, 0], [-2, 1, 1], [0, 1, 0], [1, 1, 1], [np.nextafter(np.float32(1), np.float32(np.inf)), 0, 0]]
     with pytest.raises(TypeError, match="classification"):
         bind_classification(bvh.IndexSpec(primitive), adapter=replace(resolve_boundary_adapter(primitive), classification=None))
@@ -146,11 +147,11 @@ def test_warp_classification_factory_boundary_events(dimension):
     boundary = bvh.prepare_boundary(index, data, silhouettes=False)
     points = jnp.asarray(points, jnp.float32)
     query = jax.jit(bind_classification(index.spec, stack_capacity=32))
-    sign, status = query(index.data, boundary, points)
+    sign, status = query(boundary, points)
     np.testing.assert_array_equal(sign, [-1, 1, 0, 0, 1])
     np.testing.assert_array_equal(status, 1)
-    invalid = boundary._replace(core=boundary.core._replace(closed=jnp.array([0], jnp.int32)))
-    sign, status = query(index.data, invalid, points)
+    invalid = replace(boundary, core=boundary.core._replace(closed=jnp.array([0], jnp.int32)))
+    sign, status = query(invalid, points)
     assert np.isnan(sign).all()
     np.testing.assert_array_equal(status, -1)
 
@@ -179,6 +180,6 @@ def test_warp_custom_multi_root_events_and_tangent_classification():
     np.testing.assert_array_equal(bind_rays(index.spec, "any", ops=ops)(index.data, origins, directions)[0], True)
     Meta = namedtuple("SphereDomainData", ["closed"])
     policy = ClassificationOps(SphereDomain, _sphere_valid, _sphere_event)
-    sign, status = bind_classification(index.spec, policy)(index.data, Meta(jnp.array([1], jnp.int32)), origins)
+    sign, status = bind_classification(index.spec, policy)(BoundaryData(index.data, Meta(jnp.array([1], jnp.int32))), origins)
     np.testing.assert_array_equal(sign, [1., -1., 1.])
     np.testing.assert_array_equal(status, 1)

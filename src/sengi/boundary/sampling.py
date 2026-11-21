@@ -1,19 +1,22 @@
 """Boundary sampling metadata and measure preparation."""
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Generic, NamedTuple, TypeVar
+from typing import Any, Generic, TypeVar
 
+import jax
 from jax.typing import ArrayLike
 import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
 from sengi.warp.native import NativeHeaders
+from sengi.bvh.index import IndexData
 from sengi.boundary.metadata import _reduce_nodes
 from sengi.warp.contracts import warp_struct
 
 ItemT = TypeVar("ItemT")
 P = TypeVar("P")
+H = TypeVar("H")
 CH = TypeVar("CH")
 
 
@@ -23,7 +26,10 @@ class SamplingMeta:
     node_weight: wp.array(dtype=wp.float32)
 
 
-class SamplingData(NamedTuple):
+@jax.tree_util.register_dataclass
+@dataclass(frozen=True, eq=False)
+class SamplingData(Generic[H]):
+    data: IndexData[H]
     primitive_weight: ArrayLike
     node_weight: ArrayLike
 
@@ -36,9 +42,10 @@ class MeasureOps(Generic[ItemT, P, CH]):
     native: NativeHeaders | None = None
 
 
-def prepare_boundary_sample(tree, boundary, measure=None):
+def prepare_boundary_sample(boundary, measure=None):
     """Use the same static measure policy when preparing and querying."""
-    core = boundary.core if hasattr(boundary, "core") else boundary
+    tree = boundary.data.tree
+    core = boundary.core
     if measure is not None and measure.weights is not None:
         raw = measure.weights(core)
         if np.iscomplexobj(raw):
@@ -56,7 +63,8 @@ def prepare_boundary_sample(tree, boundary, measure=None):
     nodes = _reduce_nodes(tree, values, lambda a: a.sum(axis=0, dtype=np.float32))
     if not np.isfinite(nodes).all():
         raise ValueError("subtree sampling weight exceeds float32 range")
-    return SamplingData(primitive_weight, jnp.asarray(nodes, device=tree.node_lower.sharding))
+    return SamplingData(boundary.data, primitive_weight,
+                        jnp.asarray(nodes, device=tree.node_lower.sharding))
 
 
 @lru_cache(maxsize=None)

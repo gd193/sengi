@@ -6,7 +6,7 @@ from jax.typing import ArrayLike
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction
 from sengi.boundary.data import BoundaryAdapter, BoundaryData, BoundaryPrimitive
 from sengi.queries.silhouette import SilhouetteQuery
-from sengi.bvh.index import IndexData, IndexSpec
+from sengi.bvh.index import IndexSpec
 H = TypeVar("H")
 D = TypeVar("D")
 ItemT = TypeVar("ItemT")
@@ -23,7 +23,7 @@ class StarRadiusQuery(Generic[H, D, ItemT, P, CH, CD, FH, FD, FI]):
     @property
     def _device_kernel(self) -> object: ...
     silhouette: SilhouetteQuery[H, D, ItemT, P, P, CH, CD, FH, FD, FI]
-    def __call__(self, data: IndexData[H], boundary: BoundaryData[CH, FH] | FH,
+    def __call__(self, boundary: BoundaryData[H, CH, FH],
                  points: ArrayLike, cap: ArrayLike) -> tuple[jax.Array, jax.Array]: ...
 
 

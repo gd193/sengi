@@ -72,7 +72,8 @@ def test_warp_factory_batching_dynamic_data_and_cpu():
     for a, b in zip(expected, on_cpu, strict=True):
         np.testing.assert_array_equal(a, b)
     changed = geometry._replace(a=geometry.a+jnp.array([0., 1]), b=geometry.b+jnp.array([0., 1]))
-    shifted_tree = tree._replace(
+    shifted_tree = replace(
+        tree,
         node_ray_lower=tree.node_ray_lower.at[:, :3].add(jnp.array([0., 1, 0])),
         node_ray_upper=tree.node_ray_upper.at[:, :3].add(jnp.array([0., 1, 0])),
         node_lower=tree.node_lower+jnp.array([0., 1, 0]),
@@ -432,7 +433,7 @@ def test_warp_factory_outward_bounds_and_invalid_geometry():
         with pytest.raises(ValueError, match="finite"):
             Points().data(values)
     with pytest.raises(ValueError, match="index"):
-        Triangles().data([[0., 0, 0]], [[0, 1, 2]])
+        Triangles().indexed([[0., 0, 0]], [[0, 1, 2]])
 
 
 @pytest.mark.parametrize("primitive", [Points(2), Points(3), Segments(2), Segments(3)], ids=lambda p: f"{p.name}{p.dimension}")

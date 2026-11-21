@@ -1,5 +1,6 @@
 """Reject region callbacks for other primitives and swapped metadata."""
 from sengi import bvh
+from sengi.boundary.data import BoundaryData
 import warp as wp
 from sengi.bvh.device_tree import DeviceTree, TreeData
 from sengi.primitives.points import Points
@@ -16,4 +17,4 @@ def invalid(tree: DeviceTree, points: PointsData3, data: ExternalData,
     external.device(p, p, tree, points)  # expect: reportArgumentType
     external.device(wp.vec2(), p, tree, data)  # expect: reportArgumentType
     classified.device(p, p, tree, data, points)  # expect: reportArgumentType
-    classified(bvh.IndexData(host_tree, host), metadata, 0.0, 0.0)  # expect: reportArgumentType
+    classified(BoundaryData(bvh.IndexData(host_tree, host), metadata), 0.0, 0.0)  # expect: reportArgumentType

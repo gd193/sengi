@@ -1,18 +1,23 @@
 """Triangle primitive specification and distance operations."""
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import numpy as np
 import warp as wp
 
+from sengi.warp.native import package_headers
 from sengi.primitives.crossings import native_triangle_crossing
 from sengi.primitives.data import TrianglesArrays3, TrianglesData3
 from sengi.primitives.device import item_functions
 from sengi.primitives.items import TriangleItem3
 from sengi.primitives.packing import _indexed_data
-from sengi.primitives.spec import Primitive
+from sengi.primitives.spec import IndexedBoundaryPrimitive
 from sengi.queries.domain import Ray
-from sengi.warp.native import package_headers
 from sengi.warp.contracts import FusedNearestOps, as_warp_function
+
+if TYPE_CHECKING:
+    from sengi.boundary.data import BoundaryCore, BoundaryCoreData, SilhouetteData, SilhouetteMeta
+    from sengi.primitives.items import SilhouetteItem3
 
 
 _NATIVE = package_headers(
@@ -33,7 +38,7 @@ def _triangle_pack(data, ids):
 
 
 @lru_cache(maxsize=None)
-def Triangles() -> Primitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp.vec3]:
+def Triangles() -> "IndexedBoundaryPrimitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp.vec3, BoundaryCoreData, BoundaryCore, SilhouetteData, SilhouetteMeta, SilhouetteItem3]":
     from sengi.boundary.data import _builtin_adapter
 
     dimension = 3
@@ -96,12 +101,7 @@ def Triangles() -> Primitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp
 
     prepare_indexed = _indexed_data(Payload, dimension, 3)
 
-    def prepare_data(*arrays):
-        if len(arrays) != 2:
-            raise ValueError("triangles expect vertices and faces")
-        return prepare_indexed(*arrays)
-
-    return Primitive(
+    return IndexedBoundaryPrimitive(
         dimension=dimension, point_type=Vec, data_type=Data, item_type=Item,
         load=load, bounds_of_item=item_bounds, host_bounds=host_bounds, host_pack=host_pack,
         closest_euclidean=as_warp_function(closest),
@@ -109,6 +109,6 @@ def Triangles() -> Primitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp
         closest_euclidean_at=as_warp_function(closest_at),
         intersect=as_warp_function(intersect),
         group_leaves=True, cache_nearest_bounds=False, name="triangles", payload_type=Payload,
-        prepare_data=prepare_data, prepare_indexed=prepare_indexed,
+        prepare_indexed=prepare_indexed,
         boundary_adapter=_builtin_adapter(3), bind_fused_euclidean=bind_fused_euclidean, native=_NATIVE,
     )

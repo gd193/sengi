@@ -1,15 +1,18 @@
 """Primitive-independent BVH arrays."""
 from __future__ import annotations
 
-from collections import namedtuple
+from dataclasses import dataclass
 from functools import partial
 from operator import index
+from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
 from sengi.bvh.config import Config
+from sengi.bvh.index import IndexSpec
 from sengi.bvh import lbvh, sah
 from sengi.bvh.tree import _int32_array, _pack_ray_nodes, _validate_tree
 from sengi.bvh.bounds import _validated_bounds
@@ -32,9 +35,34 @@ class DeviceTree:
     node_ray_upper: wp.array(dtype=wp.vec4)
 
 
-class TreeData(namedtuple("TreeData", DeviceTree.vars)):
-    __slots__ = ()
+@dataclass(frozen=True)
+class _IndexSchema:
+    """Static primitive and host geometry schema."""
 
+    spec: IndexSpec[Any]
+    geometry_type: type
+
+
+@partial(jax.tree_util.register_dataclass,
+         data_fields=tuple(DeviceTree.vars), meta_fields=("_schema",))
+@dataclass(frozen=True, eq=False)
+class TreeData:
+    node_lower: jax.Array
+    node_upper: jax.Array
+    node_left: jax.Array
+    node_right: jax.Array
+    node_leaf_offset: jax.Array
+    node_leaf_count: jax.Array
+    prim_ids: jax.Array
+    node_ray_lower: jax.Array
+    node_ray_upper: jax.Array
+    _schema: _IndexSchema
+
+    def validate_geometry(self, geometry: object, primitive: object) -> None:
+        """Reject geometry incompatible with a query's static specialization."""
+        schema = self._schema
+        if schema.spec.primitive != primitive or type(geometry) is not schema.geometry_type:
+            raise TypeError("index data is incompatible with the bound primitive or geometry schema")
 
 
 def build_device_tree(primitive, data, config=None, *, builder="sah"):
@@ -50,23 +78,24 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
         raise ValueError("BVH bounds support 2D or 3D primitives")
     try:
         max_depth = index(config.max_stack_depth)
-        leaf_size = index(config.leaf_size_threshold)
     except TypeError as exc:
-        raise ValueError("leaf size and stack depth must be integers") from exc
-    if not 1 <= max_depth <= STACK_CAPACITY or leaf_size < 1:
-        raise ValueError("invalid leaf size or stack depth")
+        raise ValueError("stack depth must be an integer") from exc
+    if not 1 <= max_depth <= STACK_CAPACITY:
+        raise ValueError("invalid stack depth")
     lo, hi = _validated_bounds(*primitive.bounds(data), dimension=primitive.dimension)
     if not len(lo):
         empty = jnp.empty((0,), jnp.int32)
         bounds = jnp.empty((0, 3), jnp.float32)
         packed = jnp.empty((0, 4), jnp.float32)
-        tree = TreeData(bounds, bounds, empty, empty, empty, empty, empty, packed, packed)
-        return tree, primitive.pack(data, empty)
+        geometry = primitive.pack(data, empty)
+        tree = TreeData(bounds, bounds, empty, empty, empty, empty, empty, packed, packed,
+                        _IndexSchema(IndexSpec(primitive), type(geometry)))
+        return tree, geometry
     if len(lo) >= 2**31:
         raise ValueError("primitive IDs must fit int32")
     if primitive.dimension == 2:
         lo, hi = (np.pad(v, ((0, 0), (0, 1))) for v in (lo, hi))
-    built = build(lo, hi, min(leaf_size, len(lo)))
+    built = build(lo, hi, min(config.leaf_size_threshold, len(lo)))
     arrays, depths, _ = _validate_tree(built, len(lo))
     if depths.max() > max_depth:
         raise ValueError("tree exceeds configured stack depth")
@@ -96,6 +125,9 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
             raise ValueError("tree internal bounds must enclose their children")
 
     packed = _pack_ray_nodes(node_lo, node_hi, left, right, offset, count)
+    device_ids = jnp.asarray(ids)
+    geometry = primitive.pack(data, device_ids)
     tree = TreeData(*(jnp.asarray(a) for a in (node_lo, node_hi, left, right, offset, count,
-                                               ids, *packed)))
-    return tree, primitive.pack(data, tree.prim_ids)
+                                               device_ids, *packed)),
+                    _schema=_IndexSchema(IndexSpec(primitive), type(geometry)))
+    return tree, geometry

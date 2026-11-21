@@ -116,7 +116,7 @@ def ours(
         group_leaves=group_leaves,
     )
     n = len(queries)
-    inputs = [jnp.asarray(queries), jnp.full((n,), cap, jnp.float32), *index.data.tree, *index.data.geometry]
+    inputs = [jnp.asarray(queries), jnp.full((n,), cap, jnp.float32), *jax.tree.leaves(index.data.tree), *index.data.geometry]
     device = wp.device_from_jax(jax.devices()[0])
     case = _make_case(
         "knn",

@@ -3,7 +3,9 @@
 Sengi builds spatial trees from JAX arrays and runs primitive-generic geometry
 queries with Warp. Host tree builders are available in `sengi.bvh`, `sengi.kd`,
 and `sengi.octree`. Pass lower and upper primitive bounds as arrays of shape
-`(N, 3)` to these builders. Warp is optional for host-only construction.
+`(N, 3)` to these builders. Host builders require at least one primitive.
+The query index built by `bvh.build` also accepts empty geometry. Warp is
+optional for host-only construction.
 
 For Warp queries, construct a primitive and build a BVH once. Bind each query
 to the index specification, then pass the index data and query inputs when
@@ -61,7 +63,7 @@ Build and install with conda tooling from the repository root.
 ```sh
 mamba create -n spatial-build -c conda-forge rattler-build
 mamba run -n spatial-build rattler-build build --recipe recipe/recipe.yaml -c conda-forge --output-dir "$PWD/output"
-mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.2.0 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
+mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.3.0 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
 mamba run -n spatial-dev python -m pytest tests
 ```
 

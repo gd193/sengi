@@ -3,8 +3,8 @@ from typing import Generic, Literal, TypeVar, overload
 import jax
 from jax.typing import ArrayLike
 import warp as wp
-from sengi.warp.native import NativeHeaders
 from sengi.bvh.device_tree import DeviceTree
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction, WarpRef, WarpType
 from sengi.warp.launch import BoundQuery
 from sengi.metrics.nearest import NearestOps, NearestPolicy, NearestPredicate
@@ -60,6 +60,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                 metric: None = ..., *,
+                evaluate: None = ...,
+                lower_bound: None = ...,
+                predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+                mode: Literal["any", "count"] = ..., accumulator: None = ...,
+                stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
+                packed_nodes: bool = ..., group_leaves: bool | None = ...
+                ) -> RadiusQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT]: ...
+
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+                metric: None = ..., *,
                 evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]],
                 lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float],
                 predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
@@ -67,6 +78,18 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                 stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
                 packed_nodes: bool = ..., group_leaves: bool | None = ...
                 ) -> RadiusQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT]: ...
+
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+                metric: None = ..., *,
+                evaluate: None = ...,
+                lower_bound: None = ...,
+                predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+                mode: Literal["accumulate"],
+                accumulator: RadiusAccumulator[PointT, ItemT, PointT, StateT, ResultT],
+                stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
+                packed_nodes: bool = ..., group_leaves: bool | None = ...
+                ) -> RadiusReduction[HostDataT, DeviceDataT, ItemT, PointT, PointT, ResultT]: ...
 
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],

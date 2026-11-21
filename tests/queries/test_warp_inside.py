@@ -51,7 +51,7 @@ def test_warp_inside_matches_solid_angles(builder, shape):
     points = np.random.default_rng(407).uniform(-1.2, 1.2, (181, 3)).astype(np.float32)
     points = np.concatenate([points, [[0, 0, 0], [0.7, 0, 0]]]).astype(np.float32)
     sign, status = jax.jit(queries.classification.bind(a.spec))(
-        a.data, boundary, points
+        boundary, points
     )
     np.testing.assert_array_equal(
         sign, _winding(np.asarray(mesh.vertices, np.float32), mesh.faces, points)
@@ -90,7 +90,7 @@ def test_warp_inside_shared_edges_vertices_and_boundary(builder, leaf):
             rng.shuffle(mesh.faces)
         a, boundary = _build(mesh, builder, leaf)
         signs, statuses = jax.jit(queries.classification.bind(a.spec))(
-            a.data, boundary, points
+            boundary, points
         )
         np.testing.assert_array_equal(signs, expected)
         np.testing.assert_array_equal(statuses, 1)
@@ -110,7 +110,7 @@ def test_warp_inside_scales_and_nextafter_contacts(scale, shift):
     points[5, 1] = np.nextafter(lo[1], np.float32(np.inf))
     points[6, 2] = hi[2]
     np.testing.assert_array_equal(
-        queries.classification.bind(a.spec)(a.data, boundary, points)[0],
+        queries.classification.bind(a.spec)(boundary, points)[0],
         [-1, 0, 1, -1, 1, -1, 0],
     )
 
@@ -123,7 +123,6 @@ def test_warp_inside_disconnected_and_nested_shells():
     a, boundary = _build(trimesh.util.concatenate([outer, inner, other]))
     np.testing.assert_array_equal(
         queries.classification.bind(a.spec)(
-            a.data,
             boundary,
             jnp.array([[0, 0, 0], [1.5, 0, 0], [3, 0, 0], [5, 0, 0], [7, 0, 0]]),
         )[0],
@@ -142,7 +141,7 @@ def test_warp_inside_invalid_meshes_fail(damage):
         mesh.vertices[mesh.faces[0, 1]] = mesh.vertices[mesh.faces[0, 0]]
     a, boundary = _build(mesh)
     sign, status = queries.classification.bind(a.spec)(
-        a.data, boundary, jnp.array([[0, 0, 0], [10, 10, 10]])
+        boundary, jnp.array([[0, 0, 0], [10, 10, 10]])
     )
     assert np.isnan(sign).all()
     np.testing.assert_array_equal(status, -1)
@@ -151,22 +150,22 @@ def test_warp_inside_invalid_meshes_fail(damage):
 def test_warp_inside_invalid_points_empty_mesh_and_batch():
     a, boundary = _build(trimesh.creation.box())
     points = jnp.array([[jnp.nan, 0, 0], [0, jnp.inf, 0], [0, 0, -jnp.inf]])
-    sign, status = queries.classification.bind(a.spec)(a.data, boundary, points)
+    sign, status = queries.classification.bind(a.spec)(boundary, points)
     assert np.isnan(sign).all()
     np.testing.assert_array_equal(status, -1)
     source = _mesh(np.zeros((0, 3)), np.zeros((0, 3), np.int32))[0]
     empty = bvh.build(TRIANGLES, source)
     empty_boundary = bvh.prepare_boundary(empty, source, silhouettes=False)
     sign, status = queries.classification.bind(empty.spec)(
-        empty.data, empty_boundary, jnp.zeros((3, 3))
+        empty_boundary, jnp.zeros((3, 3))
     )
     np.testing.assert_array_equal(sign, 1)
     np.testing.assert_array_equal(status, 0)
-    assert queries.classification.bind(a.spec)(a.data, boundary, jnp.empty((2, 0, 3)))[
+    assert queries.classification.bind(a.spec)(boundary, jnp.empty((2, 0, 3)))[
         0
     ].shape == (2, 0)
     with pytest.raises(ValueError, match="query shape"):
-        queries.classification.bind(a.spec)(a.data, boundary, jnp.zeros(2))[0]
+        queries.classification.bind(a.spec)(boundary, jnp.zeros(2))[0]
 
 
 @pytest.mark.parametrize("builder", BUILDERS)
@@ -176,15 +175,15 @@ def test_warp_inside_cpu_nested_vmap_and_dynamic_geometry(builder):
     points = jnp.array([[[0, 0, 0], [1.5, 0, 0]], [[0, 1, 0], [3, 3, 3]]], jnp.float32)
     classify = queries.classification.bind(a.spec)
     query = jax.jit(
-        jax.vmap(jax.vmap(classify, in_axes=(None, None, 0)), in_axes=(None, None, 0))
+        jax.vmap(jax.vmap(classify, in_axes=(None, 0)), in_axes=(None, 0))
     )
-    np.testing.assert_array_equal(query(a.data, boundary, points)[0], [[-1, 1], [0, 1]])
+    np.testing.assert_array_equal(query(boundary, points)[0], [[-1, 1], [0, 1]])
     np.testing.assert_array_equal(
-        query(b.data, b_boundary, points)[0], [[-1, -1], [-1, 1]]
+        query(b_boundary, points)[0], [[-1, -1], [-1, 1]]
     )
     cpu = jax.devices("cpu")[0]
-    data, metadata, cpu_points = jax.device_put((a.data, boundary, points), cpu)
-    output, _ = jax.jit(classify)(data, metadata, cpu_points)
+    metadata, cpu_points = jax.device_put((boundary, points), cpu)
+    output, _ = jax.jit(classify)(metadata, cpu_points)
     assert output.device.platform == "cpu"
     np.testing.assert_array_equal(output, [[-1, 1], [0, 1]])
 
@@ -195,10 +194,10 @@ def test_warp_inside_vertex_rays_and_rotated_contacts():
     vertices = np.asarray(mesh.vertices, np.float32)
     points = vertices - np.array([3.0, 0.0, 0.0], np.float32)
     np.testing.assert_array_equal(
-        queries.classification.bind(a.spec)(a.data, boundary, points)[0], 1
+        queries.classification.bind(a.spec)(boundary, points)[0], 1
     )
     np.testing.assert_array_equal(
-        queries.classification.bind(a.spec)(a.data, boundary, vertices)[0], 0
+        queries.classification.bind(a.spec)(boundary, vertices)[0], 0
     )
     # Dyadic coordinates give exactly representable slanted face contacts.
     vertices = np.array([[0, 0, 0], [2, 0, 1], [0, 2, 1], [0, 0, 2]], np.float32)
@@ -210,7 +209,7 @@ def test_warp_inside_vertex_rays_and_rotated_contacts():
         [[0.5, 0.5, 0.5], [1, 1, 1], [0.25, 0.25, 1], [1, 1, 0.5]], np.float32
     )
     np.testing.assert_array_equal(
-        queries.classification.bind(a.spec)(a.data, boundary, points)[0], [0, 0, -1, 1]
+        queries.classification.bind(a.spec)(boundary, points)[0], [0, 0, -1, 1]
     )
 
 
@@ -233,6 +232,6 @@ def test_warp_inside_thin_rotated_mesh_near_faces(aspect):
         [centers + delta * normals, centers - delta * normals]
     ).astype(np.float32)
     np.testing.assert_array_equal(
-        queries.classification.bind(a.spec)(a.data, boundary, points)[0],
+        queries.classification.bind(a.spec)(boundary, points)[0],
         _winding(vertices, mesh.faces, points),
     )

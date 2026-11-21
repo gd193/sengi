@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Generic, NamedTuple, Protocol, TypeVar
 
+import jax
 from jax.typing import ArrayLike
 import jax.numpy as jnp
 import numpy as np
@@ -12,6 +13,7 @@ from sengi.warp.native import NativeHeaders, package_headers
 from sengi.warp.contracts import PrimitiveSpec, warp_struct
 from sengi.boundary.metadata import triangle_boundary_features, triangle_metadata
 from sengi.warp.arrays import load_array
+from sengi.bvh.index import IndexData
 from sengi.bvh.device_tree import DeviceTree, TreeData
 
 
@@ -70,7 +72,12 @@ FD = TypeVar("FD")
 FI = TypeVar("FI")
 
 
-class BoundaryData(NamedTuple, Generic[CH, FH]):
+@jax.tree_util.register_dataclass
+@dataclass(frozen=True, eq=False)
+class BoundaryData(Generic[H, CH, FH]):
+    """Packed index and boundary metadata prepared together."""
+
+    data: IndexData[H]
     core: CH
     silhouette: FH | None = None
 
@@ -97,13 +104,13 @@ class BoundaryPrimitive(PrimitiveSpec[H, D, ItemT, P], Protocol[H, D, ItemT, P, 
     """A declared adapter retains the primitive and metadata type connections."""
 
     @property
-    def boundary_adapter(self) -> BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI] | None: ...
+    def boundary_adapter(self) -> BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI]: ...
 
 
 def _core(data, dimension):
     vertices, indices = np.asarray(data.vertices), np.asarray(data.indices)
     if len(data.a) and not len(indices):
-        raise ValueError("boundary queries require indexed connectivity; use Segments(2).indexed")
+        raise ValueError("boundary queries require source geometry with indexed connectivity")
     if vertices.shape[1:] != (dimension,) or indices.shape != (len(data.a), dimension):
         raise ValueError("indexed boundary arrays have incompatible shapes")
     facets = vertices[indices]
@@ -309,20 +316,8 @@ def resolve_boundary_adapter(primitive, adapter=None):
     raise TypeError("boundary queries require an explicit BoundaryAdapter")
 
 
-def prepare_boundary(primitive, source, tree, geometry, *, adapter=None, silhouettes=True):
-    adapter = resolve_boundary_adapter(primitive, adapter)
-    core = adapter.prepare(primitive, source)
-    meta = None
-    if silhouettes:
-        if adapter.build_silhouette is None or adapter.feature_primitive is None:
-            raise TypeError("boundary adapter has no silhouette construction")
-        meta = adapter.build_silhouette(core, tree, geometry)
-    core = adapter.pack_core(core, source, tree, geometry)
-    return BoundaryData(core, meta)
-
-
-def _adapter_policy(primitive, name):
-    policy = getattr(resolve_boundary_adapter(primitive), name)
+def _adapter_policy(primitive, name, adapter=None):
+    policy = getattr(resolve_boundary_adapter(primitive, adapter), name)
     if policy is None:
         raise TypeError(f"boundary adapter requires an explicit {name} policy")
     return policy(primitive)

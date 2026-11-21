@@ -6,9 +6,9 @@ import jax
 import numpy as np
 import warp as wp
 
-from sengi.warp.native import NativeHeaders
 from sengi.queries.domain import Ray
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
+from sengi.warp.native import NativeHeaders
 
 if TYPE_CHECKING:
     from sengi.boundary.data import BoundaryAdapter
@@ -42,9 +42,7 @@ class Primitive(Generic[HostDataT, DeviceDataT, ItemT, PointT]):
     point_bounds: bool = False
     name: str = "primitive"
     payload_type: Any = None
-    prepare_data: Callable[..., HostDataT] | None = None
     prepare_indexed: Callable[[Any, Any], HostDataT] | None = None
-    boundary_adapter: "BoundaryAdapter[HostDataT, DeviceDataT, ItemT, PointT, Any, Any, Any, Any, Any] | None" = None
 
     score_euclidean_at: WarpFunction[[PointT, DeviceDataT, int], wp.float64] | None = None
     closest_euclidean_at: WarpFunction[[PointT, DeviceDataT, int], PointT] | None = None
@@ -54,12 +52,8 @@ class Primitive(Generic[HostDataT, DeviceDataT, ItemT, PointT]):
         [PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
         FusedNearestOps[PointT, DeviceDataT, ItemT, PointT] | None,
     ] | None = None
-    native: NativeHeaders | None = None
 
-    def data(self, *arrays: Any) -> HostDataT:
-        if self.prepare_data is None:
-            raise TypeError("primitive has no array data constructor")
-        return self.prepare_data(*arrays)
+    native: NativeHeaders | None = None
 
     def indexed(self, vertices: Any, indices: Any) -> HostDataT:
         if self.prepare_indexed is None:
@@ -71,3 +65,38 @@ class Primitive(Generic[HostDataT, DeviceDataT, ItemT, PointT]):
 
     def pack(self, data: HostDataT, ids: np.ndarray | jax.Array) -> HostDataT:
         return self.host_pack(data, ids)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ArrayPrimitive(Primitive[HostDataT, DeviceDataT, ItemT, PointT]):
+    """A primitive with a constructor from per-item arrays."""
+
+    prepare_data: Callable[..., HostDataT]
+
+    def data(self, *arrays: Any) -> HostDataT:
+        return self.prepare_data(*arrays)
+
+
+CoreHostT = TypeVar("CoreHostT")
+CoreDeviceT = TypeVar("CoreDeviceT")
+FeatureHostT = TypeVar("FeatureHostT")
+FeatureDeviceT = TypeVar("FeatureDeviceT")
+FeatureItemT = TypeVar("FeatureItemT")
+
+
+@dataclass(frozen=True, kw_only=True)
+class IndexedBoundaryPrimitive(
+    Primitive[HostDataT, DeviceDataT, ItemT, PointT],
+    Generic[HostDataT, DeviceDataT, ItemT, PointT,
+            CoreHostT, CoreDeviceT, FeatureHostT, FeatureDeviceT, FeatureItemT],
+):
+    boundary_adapter: "BoundaryAdapter[HostDataT, DeviceDataT, ItemT, PointT, CoreHostT, CoreDeviceT, FeatureHostT, FeatureDeviceT, FeatureItemT]"
+
+
+@dataclass(frozen=True)
+class ArrayBoundaryPrimitive(
+    IndexedBoundaryPrimitive[HostDataT, DeviceDataT, ItemT, PointT,
+                             CoreHostT, CoreDeviceT, FeatureHostT, FeatureDeviceT, FeatureItemT],
+    ArrayPrimitive[HostDataT, DeviceDataT, ItemT, PointT],
+):
+    """A boundary primitive supporting indexed and per-item construction."""

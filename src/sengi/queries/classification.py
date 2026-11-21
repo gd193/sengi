@@ -24,23 +24,27 @@ HostMetaT = TypeVar("HostMetaT")
 @dataclass(frozen=True)
 class ClassifyQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT, HostMetaT, MetaT]):
     policy: object
+    metadata_host_type: type | None
 
-    def __call__(self, data, boundary, points):
-        tree, geometry = data
+    def __call__(self, boundary, points):
+        if self.metadata_host_type is not None and not isinstance(boundary.core, self.metadata_host_type):
+            raise TypeError(f"boundary core must be an instance of {self.metadata_host_type.__name__}")
+        tree, geometry = boundary.data
         queries, shape = _flatten_vec_queries(points, self.primitive.dimension)
-        return self.launch(tree, geometry, shape, queries, metadata=(getattr(boundary, "core", boundary),))
+        return self.launch(tree, geometry, shape, queries, metadata=(boundary.core,))
 
 
 def bind(spec, policy=None, *, adapter=None, metadata_host_type=None, stack_capacity=STACK_CAPACITY, block_dim=128):
+    if policy is not None and adapter is not None:
+        raise TypeError("supply a classification policy or an adapter")
     primitive = spec.primitive
-    # metadata_host_type records the host array schema for static callers;
-    # device metadata is still materialized directly from policy.metadata_type.
-    return _make_classify(primitive, policy, adapter=adapter,
+    return _make_classify(primitive, policy, adapter=adapter, metadata_host_type=metadata_host_type,
                           stack_capacity=stack_capacity, block_dim=block_dim)
 
 
 @cache_query
-def _make_classify(primitive, policy=None, *, adapter=None, stack_capacity=STACK_CAPACITY, block_dim=128):
+def _make_classify(primitive, policy=None, *, adapter=None, metadata_host_type=None,
+                   stack_capacity=STACK_CAPACITY, block_dim=128):
     if not 1 <= stack_capacity <= STACK_CAPACITY or not 1 <= block_dim <= 1024:
         raise ValueError("invalid stack capacity or block dimension")
     if policy is None:
@@ -99,4 +103,5 @@ def _make_classify(primitive, policy=None, *, adapter=None, stack_capacity=STACK
             "store_array(out_sign, i, sign)", "store_array(out_status, i, status)"]
     return bind_query(ClassifyQuery, "classify_kernel", primitive, inputs, outputs, body,
                       {"classify": classify}, block_dim, device=classify, groups=(("meta", Meta),), policy=policy,
+                      metadata_host_type=metadata_host_type,
                       native_providers=(policy,), components=(("event", "policy"),))

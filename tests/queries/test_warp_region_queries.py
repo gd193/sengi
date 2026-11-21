@@ -8,6 +8,8 @@ import trimesh
 
 wp = pytest.importorskip("warp")
 
+from dataclasses import replace
+
 from sengi import bvh
 from sengi.bvh.device_tree import DeviceTree
 from sengi.primitives.data import PointsData3
@@ -208,19 +210,22 @@ def test_closed_surface_inside_outside_intersects():
     index = bvh.build(primitive, source)
     boundary = bvh.prepare_boundary(index, source, silhouettes=False)
     classify_policy = primitive.boundary_adapter.classification(primitive)
-    q = bind_region_classify(index.spec, triangle_region_policy(), classify_policy)
+    q = bind_region_classify(index.spec, triangle_region_policy(), classify_policy,
+                             metadata_host_type=type(boundary.core))
     lo = np.array([[0, 0, 0], [2, 2, 2], [.9, 0, 0], [1, 0, 0]], np.float32)
     hi = np.array([[.1, .1, .1], [2.1, 2.1, 2.1], [1.1, .1, .1], [1, 0, 0]], np.float32)
-    result, status = jax.jit(q)(index.data, boundary, lo, hi)
+    result, status = jax.jit(q)(boundary, lo, hi)
     np.testing.assert_array_equal(result, [1, -1, 0, 0])
     np.testing.assert_array_equal(status, 1)
     # Intersecting boxes must also reject metadata for an open surface.
     invalid_core = boundary.core._replace(closed=jnp.array([0], jnp.int32))
-    invalid_result, invalid_status = q(index.data, invalid_core, lo, hi)
+    invalid_result, invalid_status = q(replace(boundary, core=invalid_core), lo, hi)
     np.testing.assert_array_equal(invalid_status, -1)
     np.testing.assert_array_equal(invalid_result, 0)
     assert bind_region_classify(bvh.IndexSpec(primitive), triangle_region_policy(), classify_policy,
                                metadata_host_type=type(boundary.core)) is q
+    with pytest.raises(TypeError, match="boundary core.*BoundaryCoreData"):
+        q(replace(boundary, core=boundary.core._asdict()), lo, hi)
 
 
 @wp.func

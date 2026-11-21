@@ -8,8 +8,6 @@ from typing import Any, Callable, Generic, Protocol, TypeVar
 import warp as wp
 from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
-from sengi.boundary.data import BoundaryCore, SilhouetteMeta
-from sengi.queries.robin_radius import RobinOps
 
 HostDataT = TypeVar("HostDataT")
 DeviceDataT = TypeVar("DeviceDataT")
@@ -49,7 +47,6 @@ class NearestOps(Generic[QueryT, ItemT, PointT]):
 class NearestPolicy(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[QueryT, ItemT, PointT]: ...
 
-
 class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT],
              ops: NearestOps[QueryT, ItemT, PointT]) -> WarpFunction[[QueryT, ItemT], bool]: ...
@@ -63,8 +60,6 @@ class NearestCallbacks(Generic[ItemT, PointT]):
 
 @dataclass(frozen=True)
 class Euclidean:
-    def bind_robin(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]
-                   ) -> RobinOps[PointT, DeviceDataT, ItemT, BoundaryCore, SilhouetteMeta]: ...
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[PointT, ItemT, PointT]: ...
 
 @dataclass(frozen=True)

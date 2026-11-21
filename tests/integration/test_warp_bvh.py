@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from functools import partial
 
 import jax
@@ -56,7 +57,7 @@ def test_warp_query_bridge_preserves_cpu_execution(builder):
     boundary = jax.device_put(bvh.prepare_boundary(accel, source), cpu)
     contact = jax.device_put(np.zeros(3, np.float32), cpu)
     outputs = jax.jit(query_api.silhouette.bind(accel.spec))(
-        payload, boundary, contact, jax.device_put(np.float32(0), cpu)
+        boundary, contact, jax.device_put(np.float32(0), cpu)
     )
     assert all(value.device.platform == "cpu" for value in outputs)
     cp, distance, edge, status = map(np.asarray, outputs)
@@ -305,7 +306,7 @@ def test_warp_bvh_ray_preserves_large_int32_source_face_id(builder):
     faces = np.asarray([[0, 1, 2]], np.int32)
     accel = _build(builder, vertices, faces)
     source_id = np.int32(2**24 + 1)
-    index = accel.data.tree._replace(prim_ids=jnp.asarray([source_id], dtype=jnp.int32))
+    index = replace(accel.data.tree, prim_ids=jnp.asarray([source_id], dtype=jnp.int32))
     payload = accel.data._replace(tree=index)
 
     query = jax.jit(query_api.rays.bind(accel.spec, "first"))
@@ -435,7 +436,7 @@ def test_warp_index_data_reuse_nested_vmap_jit_and_lax_loop(builder):
         jnp.zeros((batch, 3), jnp.float32),
     )
     source_tree, source_geometry = accel.data.tree, accel.data.geometry
-    source_shapes = [tuple(x.shape) for x in (*source_tree, *source_geometry)]
+    source_shapes = [tuple(x.shape) for x in (*jax.tree.leaves(source_tree), *source_geometry)]
 
     def ffi_inputs(jaxpr):
         calls = []
@@ -481,7 +482,7 @@ def test_warp_silhouette_includes_open_boundary_and_no_candidate(builder):
         np.asarray,
         jax.jit(
             jax.vmap(
-                partial(query_api.silhouette.bind(accel.spec), accel.data, boundary)
+                partial(query_api.silhouette.bind(accel.spec), boundary)
             )
         )(qs)[:3],
     )
@@ -505,7 +506,7 @@ def test_warp_closed_mesh_has_no_interior_silhouette(builder):
     accel = _build(builder, v, f)
     boundary = bvh.prepare_boundary(accel, _mesh(v, f)[0])
     cp, dist, edge_id = query_api.silhouette.bind(accel.spec)(
-        accel.data, boundary, jnp.zeros((3,), jnp.float32)
+        boundary, jnp.zeros((3,), jnp.float32)
     )[:3]
     assert np.isinf(float(dist))
     assert int(edge_id) == -1
@@ -530,7 +531,7 @@ def test_warp_silhouette_cap_and_ties_across_children(builder):
     points = jnp.asarray([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
     caps = jnp.asarray([1.0, np.nextafter(np.float32(1), np.float32(0)), 0.0])
     query = jax.jit(query_api.silhouette.bind(accel.spec))
-    cp, distance, edge, status = map(np.asarray, query(payload, boundary, points, caps))
+    cp, distance, edge, status = map(np.asarray, query(boundary, points, caps))
     np.testing.assert_array_equal(status, [1, 0, 1])
     np.testing.assert_array_equal(edge, [0, -1, 0])
     np.testing.assert_array_equal(cp[[0, 2]], [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
@@ -550,7 +551,7 @@ def test_warp_star_radius_applies_only_the_requested_cap(builder):
         np.asarray,
         jax.jit(
             jax.vmap(
-                partial(query_api.star_radius.bind(accel.spec), accel.data, boundary)
+                partial(query_api.star_radius.bind(accel.spec), boundary)
             )
         )(q, caps),
     )
@@ -560,7 +561,7 @@ def test_warp_star_radius_applies_only_the_requested_cap(builder):
 
     # No silhouette lies within the cap.
     _, bounded_dist, bounded_id, bounded_status = query_api.silhouette.bind(accel.spec)(
-        accel.data, boundary, q[0], max_distance=jnp.float32(0.2)
+        boundary, q[0], max_distance=jnp.float32(0.2)
     )
     assert np.isinf(float(bounded_dist))
     assert int(bounded_id) == -1 and int(bounded_status) == 0
@@ -572,7 +573,7 @@ def test_warp_star_radius_applies_only_the_requested_cap(builder):
     def per_cap(cap):
         return jax.vmap(
             lambda point: query_api.star_radius.bind(accel.spec)(
-                accel.data, boundary, point, cap
+                boundary, point, cap
             )
         )(points)
 
@@ -586,7 +587,7 @@ def test_warp_boundary_sampler_area_pdf_and_null_event(builder):
     prims, vertices, faces = _sphere(2)
     accel = bvh.build(TRIANGLES, prims, builder=builder)
     boundary = bvh.prepare_boundary(accel, prims, silhouettes=False)
-    sampling = prepare_boundary_sample(accel.data.tree, boundary)
+    sampling = prepare_boundary_sample(boundary)
     rng = np.random.default_rng(136)
     n = 12000
     randoms = rng.random((n, 3), dtype=np.float32)
@@ -603,7 +604,7 @@ def test_warp_boundary_sampler_area_pdf_and_null_event(builder):
     )
     total_area = float(areas.sum())
     sampler = jax.jit(
-        partial(query_api.boundary_sample.bind(accel.spec), accel.data, sampling)
+        partial(query_api.boundary_sample.bind(accel.spec), sampling)
     )
 
     p, normal, pdf, ids, status = map(
@@ -631,7 +632,7 @@ def test_warp_boundary_sampler_area_pdf_and_null_event(builder):
     scalar_point_out = jax.jit(
         jax.vmap(
             lambda r, u: query_api.boundary_sample.bind(accel.spec)(
-                accel.data, sampling, jnp.zeros((3,), jnp.float32), r, u
+                sampling, jnp.zeros((3,), jnp.float32), r, u
             ),
             in_axes=(0, 0),
         )
@@ -680,9 +681,8 @@ def test_warp_boundary_sampler_area_pdf_and_null_event(builder):
     empty_source = _mesh(np.zeros((0, 3), np.float32), np.zeros((0, 3), np.int32))[0]
     empty = bvh.build(TRIANGLES, empty_source, builder=builder)
     empty_boundary = bvh.prepare_boundary(empty, empty_source, silhouettes=False)
-    empty_sampling = prepare_boundary_sample(empty.data.tree, empty_boundary)
+    empty_sampling = prepare_boundary_sample(empty_boundary)
     empty_out = query_api.boundary_sample.bind(empty.spec)(
-        empty.data,
         empty_sampling,
         jnp.zeros((1, 3), jnp.float32),
         jnp.asarray([jnp.inf]),
@@ -719,12 +719,12 @@ def test_warp_bvh_empty_mesh_and_query_batches(builder, empty_tree):
         jax.jit(partial(query_api.overlap.bind(accel.spec), accel.data))(q, q),
     ]
     boundary = bvh.prepare_boundary(accel, _mesh(v, f)[0])
-    sampling = prepare_boundary_sample(accel.data.tree, boundary)
+    sampling = prepare_boundary_sample(boundary)
     outputs.extend(
         [
-            jax.jit(query_api.silhouette.bind(accel.spec))(accel.data, boundary, q),
+            jax.jit(query_api.silhouette.bind(accel.spec))(boundary, q),
             jax.jit(query_api.boundary_sample.bind(accel.spec))(
-                accel.data, sampling, q, caps, q
+                sampling, q, caps, q
             ),
         ]
     )
@@ -1068,7 +1068,7 @@ def test_warp_silhouette_geometry_regressions(case, scale):
     points = np.asarray(points, np.float32)
     cp, distance, edge, status = map(
         np.asarray,
-        jax.jit(partial(query_api.silhouette.bind(accel.spec), accel.data, boundary))(
+        jax.jit(partial(query_api.silhouette.bind(accel.spec), boundary))(
             points, max_distance=caps
         ),
     )
@@ -1113,7 +1113,7 @@ def test_warp_index_shares_indexed_geometry(builder):
     index = bvh.build(TRIANGLES, prims, builder=builder)
     payload = index.data
     boundary = bvh.prepare_boundary(index, prims)
-    sampling = prepare_boundary_sample(payload.tree, boundary)
+    sampling = prepare_boundary_sample(boundary)
     ids = np.asarray(payload.tree.prim_ids)
     assert not np.array_equal(ids, np.arange(len(faces)))
     np.testing.assert_array_equal(payload.geometry.indices, faces[ids])
@@ -1131,9 +1131,8 @@ def test_warp_preserves_edge_and_sampled_face_ids():
         TRIANGLES, primitives, builder="sah", config=Config(leaf_size_threshold=1)
     )
     boundary = bvh.prepare_boundary(accel, primitives)
-    sampling = prepare_boundary_sample(accel.data.tree, boundary)
+    sampling = prepare_boundary_sample(boundary)
     point, distance, edge_id, status = query_api.silhouette.bind(accel.spec)(
-        accel.data,
         boundary,
         jnp.asarray([0.5, 0.0, 0.0], jnp.float32),
         max_distance=0.0,
@@ -1144,7 +1143,7 @@ def test_warp_preserves_edge_and_sampled_face_ids():
     draws = jnp.array([[0.2, 0.3, 0.4], [0.8, 0.3, 0.4]])
     np.testing.assert_array_equal(
         query_api.boundary_sample.bind(accel.spec)(
-            accel.data, sampling, jnp.zeros((2, 3)), jnp.inf, draws
+            sampling, jnp.zeros((2, 3)), jnp.inf, draws
         )[3],
         [1, 0],
     )

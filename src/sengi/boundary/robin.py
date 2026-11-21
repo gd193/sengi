@@ -6,9 +6,11 @@ import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
+from sengi.bvh.index import IndexData
 from sengi.boundary.metadata import _reduce_nodes
 from sengi.warp.contracts import warp_struct
 
+H = TypeVar("H")
 CH = TypeVar("CH")
 FH = TypeVar("FH")
 
@@ -24,7 +26,8 @@ class CoefficientData(NamedTuple):
     node_bounds: ArrayLike
 
 
-class RobinData(NamedTuple, Generic[CH, FH]):
+class RobinData(NamedTuple, Generic[H, CH, FH]):
+    data: IndexData[H]
     core: CH
     silhouette: FH
     coefficients: CoefficientData
@@ -50,7 +53,8 @@ def prepare_robin_coefficients(tree, minimum, maximum=None):
     return CoefficientData(*(jnp.asarray(a, device=tree.node_lower.sharding) for a in (primitive, nodes)))
 
 
-def prepare_robin(tree, boundary, minimum, maximum=None):
+def prepare_robin(boundary, minimum, maximum=None):
     if boundary.silhouette is None:
         raise ValueError("Robin radius requires silhouette metadata")
-    return RobinData(boundary.core, boundary.silhouette, prepare_robin_coefficients(tree, minimum, maximum))
+    return RobinData(boundary.data, boundary.core, boundary.silhouette,
+                     prepare_robin_coefficients(boundary.data.tree, minimum, maximum))

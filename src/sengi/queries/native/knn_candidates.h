@@ -129,8 +129,8 @@ CUDA_CALLABLE inline int knn_id(const KnnCandidates<K, Small, TrackSlots>& c, in
     else return static_cast<int32_t>(uint32_t(c.entries[i]));
 }
 template<int K, bool Small, bool TrackSlots>
-CUDA_CALLABLE inline float knn_limit(const KnnCandidates<K, Small, TrackSlots>& c, float initial) {
-    return c.size < K ? initial : knn_score(c, Small ? K-1 : 0);
+CUDA_CALLABLE inline float knn_worst(const KnnCandidates<K, Small, TrackSlots>& c) {
+    return knn_score(c, Small ? K-1 : 0);
 }
 template<int K, bool Small, bool TrackSlots>
 CUDA_CALLABLE inline void knn_sort(KnnCandidates<K, Small, TrackSlots>& c) {

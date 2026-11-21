@@ -163,9 +163,13 @@ def test_k_is_positive_static_python_int(k):
         bind_knn(bvh.IndexSpec(Points()), k, Euclidean())
 
 
-def test_explicit_metric_or_complete_callbacks_required():
+def test_euclidean_default_and_complete_callbacks_required():
     evaluate, bound = weighted_callbacks(2, (1., 4.))
-    for kwargs in ({}, {"evaluate": evaluate}, {"lower_bound": bound},
+    spec = bvh.IndexSpec(Points(2))
+    assert bind_knn(spec, 2) is bind_knn(spec, 2, Euclidean())
+    assert bind_nearest(spec) is bind_nearest(spec, Euclidean())
+    assert bind_radius(spec) is bind_radius(spec, Euclidean())
+    for kwargs in ({"evaluate": evaluate}, {"lower_bound": bound},
                    {"metric": Euclidean(), "evaluate": evaluate, "lower_bound": bound},
                    {"metric": Euclidean(), "evaluate": evaluate},
                    {"metric": Euclidean(), "lower_bound": bound}):
@@ -347,10 +351,28 @@ def test_triangle_vertex_score_rounds_once_at_midpoint():
     args = index.data, np.zeros((2, 3), np.float32), np.array([1., np.inf], np.float32)
     point, distance, ids, status = map(np.asarray, bind_nearest(index.spec, metric)(*args))
     # The FP32 nearest kernel can round all three vertex scores to 1.
-    assert np.isin(ids, [0, 1, 2]).all()
+    np.testing.assert_array_equal(ids, [0, 0])
     np.testing.assert_array_equal(point, corners[ids])
     np.testing.assert_array_equal(distance, [1., 1.])
     np.testing.assert_array_equal(status, [1, 1])
     np.testing.assert_array_equal(bind_knn(index.spec, 3, metric)(*args)[1],
-                                  [[2, -1, -1], [2, 0, 1]])
+                                  [[2, -1, -1], [0, 1, 2]])
     np.testing.assert_array_equal(bind_radius(index.spec, metric, mode="count")(*args)[0], [1, 3])
+
+
+@pytest.mark.parametrize("k", [1, 2, 65])
+def test_distinct_scores_with_equal_emitted_distances_use_original_ids(k):
+    primitive = Points(2)
+    points = np.array([[1., 3.5e-4], [-1., 0.]], np.float32)
+    scores = np.sum(points * points, axis=1)
+    assert scores[0] > scores[1]
+    np.testing.assert_array_equal(np.sqrt(scores), [1., 1.])
+    index = bvh.build(primitive, primitive.data(points), config=Config(leaf_size_threshold=1))
+    args = index.data, np.zeros(2, np.float32)
+    point, distance, item, status = bind_nearest(index.spec)(*args)
+    np.testing.assert_array_equal(point, points[0])
+    assert (float(distance), int(item), int(status)) == (1., 0, 1)
+    distances, ids, count, status = bind_knn(index.spec, k)(*args)
+    np.testing.assert_array_equal(ids[:count], np.arange(min(2, k)))
+    np.testing.assert_array_equal(distances[:count], 1.)
+    assert int(status) == 1

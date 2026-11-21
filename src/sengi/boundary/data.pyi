@@ -3,6 +3,7 @@ from typing import Callable, Generic, NamedTuple, Protocol, TypeVar, overload
 import warp as wp
 from jax.typing import ArrayLike
 from sengi.warp.contracts import DeviceArray, PrimitiveSpec, WarpFunction
+from sengi.bvh.index import IndexData
 from sengi.bvh.device_tree import DeviceTree, TreeData
 from sengi.boundary.sampling import MeasureOps
 from sengi.queries.robin_radius import RobinOps
@@ -58,7 +59,11 @@ class SilhouetteData(NamedTuple):
     node_cone_sin_cos: ArrayLike
     node_cone_radius: ArrayLike
 
-class BoundaryData(NamedTuple, Generic[CH, FH]):
+@dataclass(frozen=True, eq=False)
+class BoundaryData(Generic[H, CH, FH]):
+    """Packed index and boundary metadata prepared together."""
+
+    data: IndexData[H]
     core: CH
     silhouette: FH | None = ...
 
@@ -78,7 +83,7 @@ cone_visibility: WarpFunction[[wp.vec3, DeviceTree, SilhouetteMeta, int], bool]
 
 class BoundaryPrimitive(PrimitiveSpec[H, D, ItemT, P], Protocol[H, D, ItemT, P, CH, CD, FH, FD, FI]):
     @property
-    def boundary_adapter(self) -> BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI] | None: ...
+    def boundary_adapter(self) -> BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI]: ...
 
 @overload
 def resolve_boundary_adapter(primitive: PrimitiveSpec[H, D, ItemT, P],
@@ -87,11 +92,3 @@ def resolve_boundary_adapter(primitive: PrimitiveSpec[H, D, ItemT, P],
 @overload
 def resolve_boundary_adapter(primitive: BoundaryPrimitive[H, D, ItemT, P, CH, CD, FH, FD, FI],
     adapter: None = ...) -> BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI]: ...
-
-@overload
-def prepare_boundary(primitive: PrimitiveSpec[H, D, ItemT, P], source: H, tree: TreeData, geometry: H, *,
-    adapter: BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI],
-    silhouettes: bool = ...) -> BoundaryData[CH, FH]: ...
-@overload
-def prepare_boundary(primitive: BoundaryPrimitive[H, D, ItemT, P, CH, CD, FH, FD, FI], source: H,
-    tree: TreeData, geometry: H, *, adapter: None = ..., silhouettes: bool = ...) -> BoundaryData[CH, FH]: ...

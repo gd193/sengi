@@ -4,8 +4,8 @@ from typing import Generic, TypeVar
 
 import warp as wp
 
-from sengi.warp.native import NativeHeaders
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
+from sengi.warp.native import NativeHeaders
 from sengi.warp.arrays import load_array
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.bvh.traversal.policy import make_traversal, make_traversal_state
@@ -68,7 +68,7 @@ def bind(spec, metric=None, *, evaluate=None, lower_bound=None,
                 cache_bounds=False, packed_nodes=True, group_leaves=None):
     """Build an exact closed-radius any, count or custom accumulation query."""
     primitive = spec.primitive
-    metric = resolve_metric(metric, evaluate, lower_bound, "range.bind")
+    metric = resolve_metric(metric, evaluate, lower_bound, "radius.bind")
     if mode not in ("any", "count", "accumulate"):
         raise ValueError("mode must be 'any', 'count' or 'accumulate'")
     if (mode == "accumulate") != (accumulator is not None):

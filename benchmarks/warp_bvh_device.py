@@ -4,6 +4,7 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 
+from dataclasses import replace
 import argparse
 import hashlib
 import importlib.metadata
@@ -211,6 +212,7 @@ def _measure(cases, n, device, launches, repeats):
 
 
 def _factory_case(query, index, boundary, sampling, robin, query_args, n, block_dim):
+    from sengi.warp.launch import struct_arrays
     from sengi.metrics.nearest import Euclidean
     from sengi.queries.nearest import bind as bind_nearest
     from sengi.queries.rays import bind as bind_rays
@@ -243,7 +245,7 @@ def _factory_case(query, index, boundary, sampling, robin, query_args, n, block_
         elif query == "closest_silhouette":
             call = bind_silhouette(index.spec, stack_capacity=capacity, block_dim=block_dim).query
             geometry = boundary.silhouette
-            tree = tree._replace(node_leaf_offset=geometry.node_feature_offset,
+            tree = replace(tree, node_leaf_offset=geometry.node_feature_offset,
                 node_leaf_count=geometry.node_feature_count, prim_ids=geometry.feature_refs)
         elif query == "sample_boundary":
             call = bind_boundary_sample(index.spec,
@@ -253,7 +255,9 @@ def _factory_case(query, index, boundary, sampling, robin, query_args, n, block_
             call = bind_robin_radius(index.spec,
                                     stack_capacity=capacity, block_dim=block_dim)
             metadata = [robin.core, robin.silhouette, robin.coefficients]
-    return call.kernel, [*args, *tree, *geometry, *(a for group in metadata for a in group)]
+    arrays = [a for group, schema in zip(metadata, call.group_types, strict=True)
+              for a in struct_arrays(group, schema)]
+    return call.kernel, [*args, *jax.tree.leaves(tree), *jax.tree.leaves(geometry), *arrays]
 
 
 def main():
@@ -310,8 +314,8 @@ def main():
         needs_features = bool({"closest_silhouette", "robin_radius"}.intersection(args.queries))
         boundary = (bvh.prepare_boundary(index, source, silhouettes=needs_features)
                     if needs_features or {"classify_point", "sample_boundary"}.intersection(args.queries) else None)
-        sampling = prepare_boundary_sample(index.data.tree, boundary) if "sample_boundary" in args.queries else None
-        robin = prepare_robin(index.data.tree, boundary, args.robin_coefficient) if "robin_radius" in args.queries else None
+        sampling = prepare_boundary_sample(boundary) if "sample_boundary" in args.queries else None
+        robin = prepare_robin(boundary, args.robin_coefficient) if "robin_radius" in args.queries else None
         mesh = None
         if args.native_warp:
             mesh = wp.Mesh(points=wp.from_jax(vertices, dtype=wp.vec3),

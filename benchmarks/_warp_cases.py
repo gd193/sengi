@@ -119,11 +119,11 @@ def arguments(case, geometry, n, radius=.75):
     if case.query == "overlap":
         return (index.data, points-radius, points+radius), {}
     if case.query == "classify":
-        return (index.data, boundary, points), {}
+        return (boundary, points), {}
     if case.query in ("silhouette", "star"):
-        return (index.data, boundary, queries, caps), {}
+        return (boundary, queries, caps), {}
     if case.query == "robin":
-        return (index.data, prepare_robin(index.data.tree, boundary, 1.), points, caps), {}
+        return (prepare_robin(boundary, 1.), points, caps), {}
     randoms = jnp.asarray(rng.random((n, 3)), jnp.float32)
-    return (index.data, prepare_boundary_sample(index.data.tree, boundary), points,
+    return (prepare_boundary_sample(boundary), points,
             jnp.full_like(caps, jnp.inf), randoms), {}

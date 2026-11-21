@@ -7,10 +7,10 @@ import warp as wp
 from jax.typing import ArrayLike
 
 from sengi.warp.native import NativeHeaders
-from sengi.boundary.data import BoundaryCoreData, SilhouetteData, BoundaryCore, SilhouetteMeta
+from sengi.boundary.data import BoundaryAdapter, BoundaryPrimitive, BoundaryCoreData, SilhouetteData
 from sengi.boundary.robin import CoefficientMeta, RobinData
 from sengi.bvh.device_tree import DeviceTree
-from sengi.bvh.index import IndexData, IndexSpec
+from sengi.bvh.index import IndexSpec
 from sengi.metrics.nearest import Euclidean, NearestPolicy
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction, WarpType
 from sengi.warp.launch import BoundQuery
@@ -26,6 +26,7 @@ CH = TypeVar("CH")
 CD = TypeVar("CD")
 FH = TypeVar("FH")
 FD = TypeVar("FD")
+FI = TypeVar("FI")
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class RobinMetric(Protocol[D, ItemT, PointContra, Q, CD, FD]):
 class RobinQuery(BoundQuery, Generic[H, D, ItemT, Q, CH, CD, FH, FD]):
     device: WarpFunction[[Q, float, DeviceTree, D, CD, FD, CoefficientMeta], tuple[float, int]]
     ops: RobinOps[Q, D, ItemT, CD, FD]
-    def __call__(self, data: IndexData[H], metadata: RobinData[CH, FH],
+    def __call__(self, metadata: RobinData[H, CH, FH],
                  queries: ArrayLike, cap: ArrayLike = ...
                  ) -> tuple[jax.Array, jax.Array]: ...
 
@@ -99,8 +100,13 @@ def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
     stack_capacity: int = ..., block_dim: int = ...
     ) -> RobinQuery[H, D, ItemT, Q, BoundaryCoreData, CD, SilhouetteData, FD]: ...
 @overload
+def bind(spec: IndexSpec[BoundaryPrimitive[H, D, ItemT, P, CH, CD, FH, FD, FI]],
+    policy: None = ..., metric: Euclidean | None = ..., *,
+    stack_capacity: int = ..., block_dim: int = ...
+    ) -> RobinQuery[H, D, ItemT, P, CH, CD, FH, FD]: ...
+@overload
 def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
     policy: None = ..., metric: Euclidean | None = ..., *,
-    core_host_type: type[BoundaryCoreData] = ..., feature_host_type: type[SilhouetteData] = ...,
+    adapter: BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI],
     stack_capacity: int = ..., block_dim: int = ...
-    ) -> RobinQuery[H, D, ItemT, P, BoundaryCoreData, BoundaryCore, SilhouetteData, SilhouetteMeta]: ...
+    ) -> RobinQuery[H, D, ItemT, P, CH, CD, FH, FD]: ...

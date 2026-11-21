@@ -108,14 +108,14 @@ def more_payloads(tree: TreeData, array: jax.Array, wrong: OtherData) -> None:
     robin_query = bind_robin_radius(bvh.IndexSpec(ExternalPoints()), robin)
     from sengi.boundary.sampling import SamplingData
     from sengi.boundary.robin import RobinData, CoefficientData
-    from sengi.boundary.data import BoundaryCoreData, SilhouetteData
-    sampling = SamplingData(array, array)
-    sample_query(bvh.IndexData(tree, wrong), sampling, array, 1.0, array)  # expect: reportArgumentType
-    classify_query(bvh.IndexData(tree, wrong), ExternalMetadata(), array)  # expect: reportArgumentType
-    metadata = RobinData(BoundaryCoreData(array, array, array, array, array),
+    from sengi.boundary.data import BoundaryCoreData, BoundaryData, SilhouetteData
+    sampling = SamplingData(bvh.IndexData(tree, wrong), array, array)
+    sample_query(sampling, array, 1.0, array)  # expect: reportArgumentType
+    classify_query(BoundaryData(bvh.IndexData(tree, wrong), ExternalMetadata()), array)  # expect: reportArgumentType
+    metadata = RobinData(bvh.IndexData(tree, wrong), BoundaryCoreData(array, array, array, array, array),
         SilhouetteData(array, array, array, array, array, array, array, array, array, array),
         CoefficientData(array, array))
-    robin_query(bvh.IndexData(tree, wrong), metadata, array)  # expect: reportArgumentType
+    robin_query(metadata, array)  # expect: reportArgumentType
 
 bind_rays(bvh.IndexSpec(Points(3)), ops=RayOps[ExternalData, int](intersect=intersect))  # expect: reportArgumentType # expect: reportCallIssue
 bind_rays(bvh.IndexSpec(ExternalPoints()), ops=RayOps[PointsData3, int](intersect=builtin_intersect))  # expect: reportArgumentType # expect: reportCallIssue
@@ -148,15 +148,23 @@ def descriptor_capabilities() -> None:
 
 def feature_payloads(tree: TreeData, array: jax.Array, wrong: OtherData,
                      geometry: ExternalArrays, features: FeatureArrays) -> None:
+    from sengi.boundary.data import BoundaryCoreData, BoundaryData
     from tests.typing.warp_api.query_valid import silhouette_query, star_query, classify
-    silhouette_query(bvh.IndexData(tree, wrong), features, array)  # expect: reportArgumentType
-    silhouette_query(bvh.IndexData(tree, geometry), geometry, array)  # expect: reportArgumentType
-    star_query(bvh.IndexData(tree, wrong), features, array, 1.0)  # expect: reportArgumentType
-    star_query(bvh.IndexData(tree, geometry), geometry, array, 1.0)  # expect: reportArgumentType
-    classify(bvh.IndexData(tree, geometry), OtherMetadata(), array)  # expect: reportArgumentType
+    core = BoundaryCoreData(array, array, array, array, array)
+    silhouette_query(BoundaryData(bvh.IndexData(tree, wrong), core, features), array)  # expect: reportArgumentType
+    silhouette_query(BoundaryData(bvh.IndexData(tree, geometry), core, geometry), array)  # expect: reportArgumentType
+    star_query(BoundaryData(bvh.IndexData(tree, wrong), core, features), array, 1.0)  # expect: reportArgumentType
+    star_query(BoundaryData(bvh.IndexData(tree, geometry), core, geometry), array, 1.0)  # expect: reportArgumentType
+    classify(BoundaryData(bvh.IndexData(tree, geometry), OtherMetadata()), array)  # expect: reportArgumentType
 
 
 def wrong_robin_host_metadata(tree: TreeData, geometry: ExternalArrays, array: jax.Array) -> None:
     from tests.typing.warp_api.query_valid import robin_query
     from sengi.boundary.robin import RobinData, CoefficientData
-    robin_query(bvh.IndexData(tree, geometry), RobinData(OtherMetadata(), OtherMetadata(), CoefficientData(array, array)), array)  # expect: reportArgumentType
+    robin_query(RobinData(bvh.IndexData(tree, geometry), OtherMetadata(), OtherMetadata(), CoefficientData(array, array)), array)  # expect: reportArgumentType
+
+
+# Only primitives declaring a boundary adapter may bind implicit boundary policies.
+bind_boundary_sample(bvh.IndexSpec(ExternalPoints()))  # expect: reportArgumentType
+bind_robin_radius(bvh.IndexSpec(ExternalPoints()))  # expect: reportArgumentType
+bind_classification(bvh.IndexSpec(ExternalPoints()))  # expect: reportArgumentType

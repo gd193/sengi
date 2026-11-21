@@ -16,7 +16,7 @@ def test_closest_silhouette_matches_oracle_and_invariants(tri_fixture, builder):
     source = index.spec.primitive.indexed(mesh.vertices, mesh.faces)
     boundary = bvh.prepare_boundary(index, source)
     query = queries.silhouette.bind(index.spec)
-    cp, distance, edge, _ = map(np.asarray, query(index.data, boundary, points))
+    cp, distance, edge, _ = map(np.asarray, query(boundary, points))
     _, expected = _oracle_silhouette(
         tri_fixture.mesh.vertices, tri_fixture.mesh.faces, points
     )

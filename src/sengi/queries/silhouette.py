@@ -6,10 +6,9 @@ from typing import Generic, TypeVar
 import jax.numpy as jnp
 import warp as wp
 
-from sengi.warp.launch import cache_query
-
-from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
+from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY, _IndexSchema
 from sengi.bvh.index import IndexData, IndexSpec
+from sengi.warp.launch import cache_query
 
 
 H = TypeVar("H")
@@ -53,6 +52,7 @@ class _SilhouetteMetric:
 
 @dataclass(frozen=True)
 class SilhouetteQuery(Generic[H, D, ItemT, P, Q, CH, CD, FH, FD, FI]):
+    primitive: object
     query: object
     device: object
 
@@ -64,13 +64,15 @@ class SilhouetteQuery(Generic[H, D, ItemT, P, Q, CH, CD, FH, FD, FI]):
     def kernel(self):
         return self.query.kernel
 
-    def __call__(self, data, boundary, queries, max_distance=jnp.inf):
-        tree = data.tree
-        meta = getattr(boundary, "silhouette", boundary)
+    def __call__(self, boundary, queries, max_distance=jnp.inf):
+        tree, geometry = boundary.data
+        tree.validate_geometry(geometry, self.primitive)
+        meta = boundary.silhouette
         if meta is None:
             raise ValueError("build boundary silhouette metadata before querying")
-        feature_tree = tree._replace(node_leaf_offset=meta.node_feature_offset,
-            node_leaf_count=meta.node_feature_count, prim_ids=meta.feature_refs)
+        feature_tree = replace(tree, node_leaf_offset=meta.node_feature_offset,
+            node_leaf_count=meta.node_feature_count, prim_ids=meta.feature_refs,
+            _schema=_IndexSchema(IndexSpec(self.query.primitive), type(meta)))
         return self.query(IndexData(feature_tree, meta), queries, max_distance)
 
 
@@ -106,4 +108,4 @@ def _make_silhouette(primitive, metric, adapter, stack_capacity, block_dim):
                                  tree.node_ray_lower, tree.node_ray_upper)
         return wp.static(nearest)(point, cap, feature_tree, meta)
 
-    return SilhouetteQuery(query, device)
+    return SilhouetteQuery(primitive, query, device)

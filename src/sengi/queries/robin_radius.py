@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import warp as wp
 
 from sengi.warp.native import NativeHeaders, package_headers
-from sengi.boundary.data import _check_functions
+from sengi.boundary.data import _adapter_policy, _check_functions
 from sengi.boundary.robin import CoefficientMeta
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 from sengi.bvh.traversal.scheduling import make_walk
@@ -194,19 +194,23 @@ class RobinQuery(BoundQuery, Generic[H, D, ItemT, Q, CH, CD, FH, FD]):
     ops: object
     handlers: _RobinHandlers
 
-    def __call__(self, data, metadata, queries, cap=jnp.inf):
-        tree, geometry = data
+    def __call__(self, metadata, queries, cap=jnp.inf):
+        tree, geometry = metadata.data
         queries, caps, shape = prepare_nearest(self.ops, queries, cap)
         return self.launch(tree, geometry, shape, queries, caps,
                            metadata=(metadata.core, metadata.silhouette, metadata.coefficients))
 
 
-def bind(spec, policy=None, metric=None, *, core_host_type=None,
+def bind(spec, policy=None, metric=None, *, adapter=None, core_host_type=None,
                       feature_host_type=None, stack_capacity=STACK_CAPACITY, block_dim=64):
     primitive = spec.primitive
     # Resolve defaults and bind policies before caching; host schema markers are typing only.
     metric = Euclidean() if metric is None else metric
-    if policy is None:
+    if adapter is not None and (policy is not None or not isinstance(metric, Euclidean)):
+        raise TypeError("adapter requires the default Euclidean Robin policy")
+    if policy is None and (adapter is not None or type(metric) is Euclidean):
+        ops = _adapter_policy(primitive, "robin", adapter)
+    elif policy is None:
         bind_robin = getattr(metric, "bind_robin", None)
         if bind_robin is None:
             raise TypeError("this metric requires explicit conservative RobinOps or bind_robin")

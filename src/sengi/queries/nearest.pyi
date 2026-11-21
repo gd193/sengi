@@ -48,6 +48,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                  metric: None = ..., *,
+                 evaluate: None = ...,
+                 lower_bound: None = ...,
+                 result_policy: ResultPolicy[PointT, ItemT, PointT, ResultT],
+                 predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+                 stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool | None = ...,
+                 packed_nodes: bool = ..., group_leaves: bool | None = ...
+                 ) -> SelectedNearestQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT, ResultT]: ...
+
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+                 metric: None = ..., *,
                  evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]],
                  lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float],
                  result_policy: ResultPolicy[PointT, ItemT, PointT, ResultT],
@@ -64,6 +75,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                  stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool | None = ...,
                  packed_nodes: bool = ..., group_leaves: bool | None = ...
                  ) -> SelectedNearestQuery[HostDataT, DeviceDataT, ItemT, PointT, QueryT, IdPointResult[PointT]]: ...
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+                 metric: None = ..., *,
+                 evaluate: None = ...,
+                 lower_bound: None = ...,
+                 result_policy: IdPoint,
+                 predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+                 stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool | None = ...,
+                 packed_nodes: bool = ..., group_leaves: bool | None = ...
+                 ) -> SelectedNearestQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT, IdPointResult[PointT]]: ...
+
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                  metric: None = ..., *,
@@ -96,8 +118,3 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
 
 def prepare_nearest(ops: NearestOps[QueryT, ItemT, PointT], queries: ArrayLike,
                     max_distance: ArrayLike) -> tuple[jax.Array, jax.Array, tuple[int, ...]]: ...
-
-
-def _bind_nearest(primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT],
-                  metric: NearestPolicy[DeviceDataT, ItemT, PointT, QueryT]
-                  ) -> NearestOps[QueryT, ItemT, PointT]: ...

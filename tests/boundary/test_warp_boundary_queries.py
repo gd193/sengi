@@ -1,4 +1,5 @@
 """Boundary measure/PDF contracts and dimension-specific Robin bounds."""
+from dataclasses import replace
 from sengi import bvh
 from collections import namedtuple
 from typing import Any
@@ -39,11 +40,11 @@ def _boundary(dimension, large=False):
 @pytest.mark.parametrize("dimension", [2, 3])
 def test_warp_boundary_sample_measure_batching_and_nulls(dimension):
     index, boundary = _boundary(dimension)
-    metadata = prepare_boundary_sample(index.data.tree, boundary)
+    metadata = prepare_boundary_sample(boundary)
     sampler = bind_boundary_sample(index.spec)
     randoms = jnp.asarray(np.column_stack(((np.arange(60)+.5)/60, np.full(60, .36), np.full(60, .25))), jnp.float32)
     points = jnp.zeros((60, dimension), jnp.float32)
-    outputs = jax.jit(sampler)(index.data, metadata, points, jnp.inf, randoms)
+    outputs = jax.jit(sampler)(metadata, points, jnp.inf, randoms)
     point, normal, pdf, ids, status = map(np.asarray, outputs)
     np.testing.assert_array_equal(status, 1)
     np.testing.assert_allclose(pdf, 1./np.asarray(boundary.core.primitive_measure).sum(), rtol=3e-6)
@@ -52,10 +53,10 @@ def test_warp_boundary_sample_measure_batching_and_nulls(dimension):
         np.testing.assert_array_equal(np.bincount(ids, minlength=4), [20, 10, 20, 10])
     else:
         np.testing.assert_allclose(point, np.tile([.9, .3, 0.], (60, 1)), atol=1e-6)
-    nested = jax.jit(jax.vmap(sampler, in_axes=(None, None, 0, None, 0)))(
-        index.data, metadata, points.reshape(3, 20, dimension), jnp.inf, randoms.reshape(3, 20, 3))
+    nested = jax.jit(jax.vmap(sampler, in_axes=(None, 0, None, 0)))(
+        metadata, points.reshape(3, 20, dimension), jnp.inf, randoms.reshape(3, 20, 3))
     np.testing.assert_allclose(nested[0].reshape(60, dimension), outputs[0])
-    rejected = sampler(index.data, metadata, points, 0., randoms)
+    rejected = sampler(metadata, points, 0., randoms)
     np.testing.assert_array_equal(rejected[2], 0.)
     np.testing.assert_array_equal(rejected[3], -1)
     np.testing.assert_array_equal(rejected[4], 0)
@@ -75,14 +76,14 @@ def test_lbvh_boundary_metadata_uses_topology_order():
     assert np.any((left >= 0) & (left < np.arange(len(left))))
     ids = np.asarray(tree.prim_ids)
     assert not np.array_equal(ids, np.arange(len(x)))
-    sampling = prepare_boundary_sample(tree, boundary)
+    sampling = prepare_boundary_sample(boundary)
     coefficients = prepare_robin_coefficients(tree, x + 1)
     np.testing.assert_array_equal(sampling.primitive_weight, x[ids] + 1)
     np.testing.assert_array_equal(sampling.node_weight[0], (x + 1).sum())
     np.testing.assert_array_equal(coefficients.primitive_bounds[:, 0], x[ids] + 1)
     np.testing.assert_array_equal(coefficients.node_bounds[0], [1., 8.])
     point, _, pdf, face, status = bind_boundary_sample(index.spec)(
-        index.data, sampling, jnp.zeros(2), jnp.inf, jnp.array([.2, .3, .4]))
+        sampling, jnp.zeros(2), jnp.inf, jnp.array([.2, .3, .4]))
     assert status == 1 and point[0] == x[face]
     np.testing.assert_allclose(pdf, 1. / (x + 1).sum())
 
@@ -93,7 +94,7 @@ def test_warp_triangle_boundary_sample_uses_indexed_vertices():
     source = primitive.indexed(vertices, [[0, 1, 2]])
     index = bvh.build(primitive, source)
     boundary = bvh.prepare_boundary(index, source)
-    metadata = prepare_boundary_sample(index.data.tree, boundary)
+    metadata = prepare_boundary_sample(boundary)
     np.testing.assert_array_equal(boundary.core.primitive_normal, [[0, 0, 1]])
     np.testing.assert_array_equal(boundary.core.primitive_measure, [2**25])
     np.testing.assert_array_equal(np.abs(np.asarray(boundary.silhouette.feature_n0)[:, 2]), 1)
@@ -104,7 +105,7 @@ def test_warp_triangle_boundary_sample_uses_indexed_vertices():
     expected = (1 - root) * vertices[0].astype(np.float64) + root * np.array([.5, .5, 0])
     query = jnp.zeros(3, jnp.float32)
     sample = jax.jit(bind_boundary_sample(index.spec))
-    point, normal, pdf, face, status = sample(index.data, metadata, query, jnp.inf, randoms)
+    point, normal, pdf, face, status = sample(metadata, query, jnp.inf, randoms)
 
     np.testing.assert_array_equal(point, expected.astype(np.float32))
     np.testing.assert_array_equal(normal, [0, 0, 1])
@@ -142,9 +143,9 @@ def test_warp_boundary_custom_measure_and_exact_region_membership():
     boundary = bvh.prepare_boundary(index, source, silhouettes=False)
     measure = MeasureOps(_nonuniform_sample, lambda core: np.where(np.asarray(core.primitive_measure) == 1., 9., 1.))
     region = RegionOps(wp.float32, (), _region_valid, _region_overlaps, _region_contains)
-    metadata = prepare_boundary_sample(index.data.tree, boundary, measure)
+    metadata = prepare_boundary_sample(boundary, measure)
     sampler = bind_boundary_sample(index.spec, measure, region)
-    point, _, pdf, ids, status = jax.jit(sampler)(index.data, metadata, jnp.array([.25, .25, 4., 4.]), 0.,
+    point, _, pdf, ids, status = jax.jit(sampler)(metadata, jnp.array([.25, .25, 4., 4.]), 0.,
         jnp.array([[.05, .04, .3], [.95, .64, .3], [.95, .64, .3], [.05, 0., .3]]))
     np.testing.assert_allclose(np.asarray(point)[[0, 2]], [[.2, 0], [3.6, 0]], atol=1e-6)
     np.testing.assert_allclose(pdf, [.4, 0, .08, 0], atol=1e-6)
@@ -159,14 +160,14 @@ def test_warp_robin_dimension_correct_bounds_and_dynamic_coefficients(dimension)
     point = jnp.array([0., 1.] if dimension == 2 else [0., 0., 1.])
     expected = [np.sqrt(2.)*np.exp(.5), np.exp(.25)] if dimension == 2 else [1.5*np.sqrt(3.), 4./3.]
     for coefficient, radius in zip([1., 4., np.inf], [*expected, 1.], strict=True):
-        metadata = prepare_robin(index.data.tree, boundary, coefficient)
-        actual, status = query(index.data, metadata, point, 10.)
+        metadata = prepare_robin(boundary, coefficient)
+        actual, status = query(metadata, point, 10.)
         np.testing.assert_allclose(actual, radius, rtol=8e-6)
         assert int(status) == 1
-    metadata = prepare_robin(index.data.tree, boundary, 0.)
-    actual, status = query(index.data, metadata, point, .5)
+    metadata = prepare_robin(boundary, 0.)
+    actual, status = query(metadata, point, .5)
     np.testing.assert_array_equal([actual, status], [.5, 1.])
-    actual, status = query(index.data, metadata, jnp.full((2, dimension), jnp.nan), jnp.array([1., -1.]))
+    actual, status = query(metadata, jnp.full((2, dimension), jnp.nan), jnp.array([1., -1.]))
     assert np.isnan(actual).all()
     np.testing.assert_array_equal(status, -1)
 
@@ -187,7 +188,7 @@ def test_warp_boundary_policy_and_coefficient_validation():
         with pytest.raises(TypeError, match="explicit"):
             bind(bvh.IndexSpec(Points()))
     with pytest.raises(ValueError, match="silhouette"):
-        prepare_robin(index.data.tree, boundary._replace(silhouette=None), 1.)
+        prepare_robin(replace(boundary, silhouette=None), 1.)
 
 
 @wp.struct
@@ -224,7 +225,7 @@ def test_warp_custom_robin_policy_uses_conservative_closest_surface_ball():
 
     policy = RobinOps(wp.vec3, (3,), nearest.valid, node, leaf, feature)
     result = jax.jit(bind_robin_radius(index.spec, policy))(
-        index.data, prepare_robin(index.data.tree, boundary, 1.), jnp.array([0., 0., 1.]), 10.)
+        prepare_robin(boundary, 1.), jnp.array([0., 0., 1.]), 10.)
     np.testing.assert_array_equal(result, [1., 1.])
 
     @wp.func
@@ -245,16 +246,41 @@ def test_warp_custom_robin_policy_uses_conservative_closest_surface_ball():
     core = Core(jnp.array([.75]))
     features = Features(jnp.array([0], jnp.int32), jnp.array([0], jnp.int32),
                         jnp.array([1], jnp.int32), jnp.array([.5]))
-    metadata = prepare_robin(index.data.tree, boundary, 1.)._replace(core=core, silhouette=features)
+    metadata = prepare_robin(boundary, 1.)._replace(core=core, silhouette=features)
     for limit in (.5, .25):
         metadata = metadata._replace(silhouette=features._replace(limit=jnp.array([limit])))
-        np.testing.assert_array_equal(query(index.data, metadata, jnp.array([0., 0., 1.]), 10.), [limit, 1.])
+        np.testing.assert_array_equal(query(metadata, jnp.array([0., 0., 1.]), 10.), [limit, 1.])
     for bad in (np.nan, -1.):
         for limits in ([bad, .5], [.5, bad]):
             invalid = Features(jnp.array([0, 1], jnp.int32), jnp.array([0], jnp.int32),
                                jnp.array([2], jnp.int32), jnp.array(limits))
-            value, status = query(index.data, metadata._replace(silhouette=invalid), jnp.array([0., 0., 1.]), 10.)
+            value, status = query(metadata._replace(silhouette=invalid), jnp.array([0., 0., 1.]), 10.)
             assert np.isnan(value) and int(status) == -1
     with pytest.raises(TypeError, match="feature_bound_with_data"):
         bind_robin_radius(index.spec, RobinOps(wp.vec3, (3,), nearest.valid, node, leaf, feature,
                                             feature_type=_CustomRobinFeatures))
+
+
+def test_bound_boundary_queries_reject_incompatible_data_during_tracing():
+    from sengi.queries import classification, region_classify, silhouette, star_radius
+    from sengi.queries.region import triangle_region_policy
+
+    triangles, _ = _boundary(3)
+    _, segments = _boundary(2)
+    sample = prepare_boundary_sample(segments)
+    robin = prepare_robin(segments, 0.)
+    point = jnp.zeros(3)
+    spec = triangles.spec
+    classification_policy = spec.primitive.boundary_adapter.classification(spec.primitive)
+    cases = [
+        (classification.bind(spec), (segments, point)),
+        (region_classify.bind(spec, triangle_region_policy(), classification_policy), (segments, point, point)),
+        (silhouette.bind(spec), (segments, point)),
+        (star_radius.bind(spec), (segments, point, 1.)),
+        (bind_boundary_sample(spec), (sample, point, 1., point)),
+        (bind_robin_radius(spec), (robin, point)),
+    ]
+    assert sample.data is robin.data is segments.data
+    for query, args in cases:
+        with pytest.raises(TypeError, match="bound primitive or geometry schema"):
+            jax.jit(query).lower(*args)

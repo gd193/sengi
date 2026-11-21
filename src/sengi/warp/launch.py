@@ -46,6 +46,7 @@ class BoundQuery:
         }
 
     def launch(self, tree, geometry, shape, *args, output_shapes=None, metadata=()):
+        tree.validate_geometry(geometry, self.primitive)
         if len(metadata) != len(self.group_types):
             raise ValueError("query metadata does not match its static schema")
         call = batched_kernel(self.kernel, self.num_query_args, self.num_outputs, self.block_dim, output_shapes)

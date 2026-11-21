@@ -1,17 +1,18 @@
 """Typed boundary sampling metadata and measure preparation."""
 from dataclasses import dataclass
-from typing import Callable, Generic, NamedTuple, TypeVar
+from typing import Callable, Generic, TypeVar
 
 import warp as wp
 from jax.typing import ArrayLike
 
 from sengi.warp.native import NativeHeaders
 from sengi.boundary.data import BoundaryData
-from sengi.bvh.device_tree import TreeData
+from sengi.bvh.index import IndexData
 from sengi.warp.contracts import DeviceArray, WarpFunction
 
 ItemT = TypeVar("ItemT")
 P = TypeVar("P")
+H = TypeVar("H")
 CH = TypeVar("CH")
 FH = TypeVar("FH")
 
@@ -21,7 +22,9 @@ class SamplingMeta:
     node_weight: DeviceArray[float]
 
 
-class SamplingData(NamedTuple):
+@dataclass(frozen=True, eq=False)
+class SamplingData(Generic[H]):
+    data: IndexData[H]
     primitive_weight: ArrayLike
     node_weight: ArrayLike
 
@@ -33,5 +36,5 @@ class MeasureOps(Generic[ItemT, P, CH]):
     native: NativeHeaders | None = None
 
 
-def prepare_boundary_sample(tree: TreeData, boundary: BoundaryData[CH, FH] | CH,
-    measure: MeasureOps[ItemT, P, CH] | None = ...) -> SamplingData: ...
+def prepare_boundary_sample(boundary: BoundaryData[H, CH, FH],
+    measure: MeasureOps[ItemT, P, CH] | None = ...) -> SamplingData[H]: ...

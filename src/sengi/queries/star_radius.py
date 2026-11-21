@@ -30,8 +30,8 @@ class StarRadiusQuery(Generic[H, D, ItemT, P, CH, CD, FH, FD, FI]):
     def _device_kernel(self):
         return self.silhouette.kernel
 
-    def __call__(self, data, boundary, points, cap):
-        _, distance, _, status = self.silhouette(data, boundary, points, cap)
+    def __call__(self, boundary, points, cap):
+        _, distance, _, status = self.silhouette(boundary, points, cap)
         cap = jnp.asarray(cap, jnp.float32)
         valid = (status >= 0) & (cap >= 0.0) & ~jnp.isnan(cap)
         return (jnp.where(valid, jnp.minimum(cap, distance), jnp.nan),

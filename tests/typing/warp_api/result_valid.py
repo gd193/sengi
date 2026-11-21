@@ -47,3 +47,8 @@ def signatures(tree: DeviceTree, data: ExternalData, points: PointsData3, query:
     assert_type(plain.device(query, 2.0, tree, points), tuple[IdPointResult[wp.vec3], int])
     both = bind_knn(bvh.IndexSpec(Points()), 4, Euclidean(), result_policy=IdPoint())
     assert_type(both.device(query, 2.0, tree, points, scores, id_points, 0), tuple[int, int])
+
+    default_nearest = bind_nearest(bvh.IndexSpec(Points()), result_policy=IdPoint())
+    assert_type(default_nearest.device(query, 2.0, tree, points), tuple[IdPointResult[wp.vec3], int])
+    default_knn = bind_knn(bvh.IndexSpec(Points()), 4, result_policy=IdPoint())
+    assert_type(default_knn.device(query, 2.0, tree, points, scores, id_points, 0), tuple[int, int])

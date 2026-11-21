@@ -60,8 +60,8 @@ def _ball_region(primitive):
 class BoundarySampleQuery(BoundQuery, Generic[H, D, ItemT, P, Q]):
     region: object
 
-    def __call__(self, data, metadata, queries, radii, randoms):
-        tree, geometry = data
+    def __call__(self, metadata, queries, radii, randoms):
+        tree, geometry = metadata.data
         queries, caps, shape = prepare_nearest(self.region, queries, radii)
         randoms = jnp.asarray(randoms, jnp.float32)
         if randoms.shape[-1:] != (3,):
@@ -70,9 +70,12 @@ class BoundarySampleQuery(BoundQuery, Generic[H, D, ItemT, P, Q]):
         return self.launch(tree, geometry, shape, queries, caps, randoms, metadata=(metadata,))
 
 
-def bind(spec, measure=None, region=None, *, block_dim=256):
+def bind(spec, measure=None, region=None, *, adapter=None, block_dim=256):
     primitive = spec.primitive
-    measure = _adapter_policy(primitive, "measure") if measure is None else measure
+    if measure is not None and adapter is not None:
+        raise TypeError("supply a sampling measure or an adapter")
+    if measure is None:
+        measure = _adapter_policy(primitive, "measure", adapter)
     region = _ball_region(primitive) if region is None else region
     return _make_boundary_sample(primitive, measure, region, block_dim)
 

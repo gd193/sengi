@@ -151,7 +151,7 @@ def main():
             spec = QueryCase(primitive, mode, "euclidean" if mode in ("nearest", "silhouette") else "none")
             label = name+"/"+mode
             values, _ = arguments(spec, geometry, args.counts)
-            points = values[2] if mode == "silhouette" else values[1]
+            points = values[1]
             directions = values[2] if mode in ("first", "any") else np.zeros_like(points)
             np.asarray(points, np.float32).tofile(folder/"points.f32")
             np.asarray(directions, np.float32).tofile(folder/"directions.f32")

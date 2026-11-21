@@ -75,9 +75,11 @@ def test_custom_build_packs_extra_arrays_and_classifies():
         assert core is source
         return features
 
+    builtin_measure = resolve_boundary_adapter(primitive).measure(primitive)
+    measure = MeasureOps(builtin_measure.sample, weights=lambda core: core.required_extra)
     adapter = BoundaryAdapter(prepare, pack,
         feature_primitive=resolve_boundary_adapter(primitive).feature_primitive,
-        build_silhouette=build_features, classification=_classification)
+        build_silhouette=build_features, classification=_classification, measure=lambda _: measure)
     index = bvh.build(primitive, data, config=Config(leaf_size_threshold=1))
     tree = index.data.tree
     boundary = bvh.prepare_boundary(index, data, adapter=adapter)
@@ -88,15 +90,13 @@ def test_custom_build_packs_extra_arrays_and_classifies():
     assert boundary.silhouette is features
     np.testing.assert_array_equal(boundary.core.required_extra, np.arange(10, 13)[ids])
     query = jax.jit(bind_classification(index.spec, adapter=adapter))
-    sign, status = query(index.data, boundary, jnp.array([[-10., 0.]], jnp.float32))
+    sign, status = query(boundary, jnp.array([[-10., 0.]], jnp.float32))
     np.testing.assert_array_equal(sign, [-1.])
     np.testing.assert_array_equal(status, [1])
-    builtin_measure = resolve_boundary_adapter(primitive).measure(primitive)
-    measure = MeasureOps(builtin_measure.sample, weights=lambda core: core.required_extra)
-    sampling = prepare_boundary_sample(tree, boundary, measure)
+    sampling = prepare_boundary_sample(boundary, measure)
     np.testing.assert_array_equal(sampling.primitive_weight, boundary.core.required_extra)
-    sampler = jax.jit(bind_boundary_sample(index.spec, measure))
-    _, _, pdf, face, sample_status = sampler(index.data, sampling,
+    sampler = jax.jit(bind_boundary_sample(index.spec, adapter=adapter))
+    _, _, pdf, face, sample_status = sampler(sampling,
         jnp.array([[0., 0.]], jnp.float32), 100., jnp.array([[.25, .5, .5]], jnp.float32))
     np.testing.assert_allclose(pdf, (np.asarray(face) + 10.) / 33.)
     np.testing.assert_array_equal(sample_status, [1])

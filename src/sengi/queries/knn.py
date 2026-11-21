@@ -7,7 +7,9 @@ import warp as wp
 
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.queries.nearest import prepare_nearest
-from sengi.metrics.specialization import bind_nearest as _bind_nearest, nearest_functions, resolve_metric
+from sengi.metrics.specialization import (
+    bind_nearest, emitted_score_limit, nearest_functions, resolve_metric,
+)
 from sengi.queries.results import resolve_result
 from sengi.queries.candidates import REGISTER_LIMIT, candidate_build_options, candidate_functions
 from sengi.queries.output import custom_result_writer, result_writer
@@ -56,7 +58,7 @@ def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=Non
     ``lower_bound(query, box_lower, box_upper)`` must conservatively bound that
     score, including float32 rounding. Box endpoints are always ``wp.vec3``.
     Queries use the policy query shape. Results are (scores_or_distances, ids,
-    count, status), ordered by internal score then original ID. Missing entries
+    count, status), ordered by emitted value then original ID. Missing entries
     have +inf/-1 padding; failed rows are cleared. k is a positive Python int.
     With return_points=True, coordinates replace IDs and use zero padding.
     """
@@ -71,9 +73,9 @@ def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=Non
         raise ValueError("result_policy and return_points are mutually exclusive")
     metric = resolve_metric(metric, evaluate, lower_bound, "knn.bind")
     if group_leaves is None:
-        group_leaves = _bind_nearest(primitive, metric).group_leaves
+        group_leaves = bind_nearest(primitive, metric).group_leaves
     if result_policy is not None:
-        result_policy = resolve_result(result_policy, primitive, _bind_nearest(primitive, metric).query_type)
+        result_policy = resolve_result(result_policy, primitive, bind_nearest(primitive, metric).query_type)
     return _make_knn(primitive, k, metric, predicate=predicate,
                      stack_capacity=stack_capacity, block_dim=block_dim,
                      cache_bounds=cache_bounds, packed_nodes=packed_nodes,
@@ -91,7 +93,8 @@ def _make_knn(primitive, k, metric, *, predicate=None,
     candidates = candidate_functions(k, return_points or result_policy is not None)
     Candidates = candidates.storage
     add, limit, sort, get_count = candidates.add, candidates.limit, candidates.sort, candidates.count
-    ops = _bind_nearest(primitive, metric)
+    ops = bind_nearest(primitive, metric)
+    tie_limit = emitted_score_limit(ops)
     score_at = getattr(ops, "score_at", None)
     Query, Geometry = ops.query_type, primitive.data_type
     Point = primitive.point_type
@@ -126,8 +129,15 @@ def _make_knn(primitive, k, metric, *, predicate=None,
                 return
             if score <= state.limit:
                 index = load_array(tree.prim_ids, slot)
-                wp.static(add)(state.candidates, score, index, slot)
-                state.limit = wp.static(limit)(state.candidates, ctx.initial)
+                distance = wp.static(ops.to_distance)(score)
+                if not wp.isfinite(distance) or distance < 0.0:
+                    state.failed = True
+                    return
+                wp.static(add)(state.candidates, distance, index, slot)
+                if wp.static(tie_limit is not None):
+                    if wp.static(get_count)(state.candidates) == wp.static(k):
+                        cutoff = wp.static(limit)(state.candidates)
+                        state.limit = wp.min(state.limit, wp.static(tie_limit)(cutoff))
         return
 
     walk = make_walk(Context, State, bounds, visit, stack_capacity=stack_capacity,

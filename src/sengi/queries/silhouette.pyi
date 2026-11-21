@@ -7,7 +7,7 @@ from sengi.warp.contracts import PrimitiveSpec, WarpFunction
 from sengi.boundary.data import BoundaryAdapter, BoundaryData, BoundaryPrimitive
 from sengi.metrics.nearest import NearestPolicy
 from sengi.queries.nearest import NearestQuery
-from sengi.bvh.index import IndexData, IndexSpec
+from sengi.bvh.index import IndexSpec
 H = TypeVar("H")
 D = TypeVar("D")
 ItemT = TypeVar("ItemT")
@@ -27,7 +27,7 @@ class SilhouetteQuery(Generic[H, D, ItemT, P, Q, CH, CD, FH, FD, FI]):
     query: NearestQuery[FH, FD, FI, P, Q]
     @property
     def kernel(self) -> object: ...
-    def __call__(self, data: IndexData[H], boundary: BoundaryData[CH, FH] | FH,
+    def __call__(self, boundary: BoundaryData[H, CH, FH],
                  queries: ArrayLike, max_distance: ArrayLike = ...
                  ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]: ...
 

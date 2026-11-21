@@ -23,27 +23,31 @@ MetaT = TypeVar("MetaT")
 
 @dataclass(frozen=True)
 class RegionClassifyQuery(BoundQuery, Generic[HostDataT, DeviceDataT, PointT, HostMetaT, MetaT]):
-    def __call__(self, data, boundary, lower, upper):
-        tree, geometry = data
+    metadata_host_type: type | None
+
+    def __call__(self, boundary, lower, upper):
+        if self.metadata_host_type is not None and not isinstance(boundary.core, self.metadata_host_type):
+            raise TypeError(f"boundary core must be an instance of {self.metadata_host_type.__name__}")
+        tree, geometry = boundary.data
         lower, shape = _flatten_vec_queries(lower, self.primitive.dimension)
         upper, other = _flatten_vec_queries(upper, self.primitive.dimension)
         if shape != other:
             raise ValueError("box lower and upper batch shapes must match")
         return self.launch(tree, geometry, shape, lower, upper,
-                           metadata=(getattr(boundary, "core", boundary),))
+                           metadata=(boundary.core,))
 
 
 def bind(spec, region_policy: RegionIntersectionPolicy, classify_policy,
                          *, metadata_host_type=None, stack_capacity=STACK_CAPACITY, block_dim=128):
     """Classify a closed box: -1 outside, 0 surface contact, +1 inside."""
     primitive = spec.primitive
-    return _make_region_classify(primitive, region_policy, classify_policy,
+    return _make_region_classify(primitive, region_policy, classify_policy, metadata_host_type=metadata_host_type,
                                  stack_capacity=stack_capacity, block_dim=block_dim)
 
 
 @cache_query
 def _make_region_classify(primitive, region_policy, classify_policy, *,
-                          stack_capacity, block_dim):
+                          metadata_host_type, stack_capacity, block_dim):
     spec = IndexSpec(primitive)
     exact = bind_region(spec, region_policy, mode="any", stack_capacity=stack_capacity,
                         block_dim=block_dim)
@@ -74,5 +78,6 @@ def _make_region_classify(primitive, region_policy, classify_policy, *,
     return bind_query(RegionClassifyQuery, "region_classify_kernel", primitive, inputs,
                       outputs, body, {"classify_region": classify_region}, block_dim,
                       device=classify_region, groups=(("meta", Meta),),
+                      metadata_host_type=metadata_host_type,
                       native_providers=(region_policy, classify_policy),
                       components=(("intersection", "exact_policy"), ("classification", "policy")))

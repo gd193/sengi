@@ -7,9 +7,10 @@ import warp as wp
 from jax.typing import ArrayLike
 
 from sengi.warp.native import NativeHeaders
+from sengi.boundary.data import BoundaryAdapter, BoundaryPrimitive
 from sengi.boundary.sampling import MeasureOps, SamplingData, SamplingMeta
 from sengi.bvh.device_tree import DeviceTree
-from sengi.bvh.index import IndexData, IndexSpec
+from sengi.bvh.index import IndexSpec
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction, WarpType
 from sengi.warp.launch import BoundQuery
 
@@ -19,6 +20,10 @@ ItemT = TypeVar("ItemT")
 P = TypeVar("P")
 Q = TypeVar("Q")
 CH = TypeVar("CH")
+CD = TypeVar("CD")
+FH = TypeVar("FH")
+FD = TypeVar("FD")
+FI = TypeVar("FI")
 
 
 @dataclass(frozen=True)
@@ -34,19 +39,34 @@ class RegionOps(Generic[Q, P]):
 class BoundarySampleQuery(BoundQuery, Generic[H, D, ItemT, P, Q]):
     device: WarpFunction[[Q, float, wp.vec3, DeviceTree, D, SamplingMeta], tuple[P, P, float, int, int]]
     region: RegionOps[Q, P]
-    def __call__(self, data: IndexData[H], metadata: SamplingData,
+    def __call__(self, metadata: SamplingData[H],
                  queries: ArrayLike, radii: ArrayLike, randoms: ArrayLike
                  ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]: ...
 
 
 @overload
-def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]], *, region: RegionOps[Q, P],
-    block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, Q]: ...
-@overload
 def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
-    measure: MeasureOps[ItemT, P, CH] | None = ..., region: None = ...,
+    measure: MeasureOps[ItemT, P, CH], region: None = ...,
     *, block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, P]: ...
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
-    measure: MeasureOps[ItemT, P, CH] | None, region: RegionOps[Q, P],
+    measure: MeasureOps[ItemT, P, CH], region: RegionOps[Q, P],
     *, block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, Q]: ...
+@overload
+def bind(spec: IndexSpec[BoundaryPrimitive[H, D, ItemT, P, CH, CD, FH, FD, FI]],
+    measure: None = ..., region: None = ...,
+    *, block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, P]: ...
+@overload
+def bind(spec: IndexSpec[BoundaryPrimitive[H, D, ItemT, P, CH, CD, FH, FD, FI]],
+    measure: None = ..., *, region: RegionOps[Q, P],
+    block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, Q]: ...
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
+    measure: None = ..., region: None = ...,
+    *, adapter: BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI],
+    block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, P]: ...
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[H, D, ItemT, P]],
+    measure: None = ..., *, region: RegionOps[Q, P],
+    adapter: BoundaryAdapter[H, D, ItemT, P, CH, CD, FH, FD, FI],
+    block_dim: int = ...) -> BoundarySampleQuery[H, D, ItemT, P, Q]: ...

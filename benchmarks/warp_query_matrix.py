@@ -1,4 +1,5 @@
 """Device-only timings for every builtin primitive/metric/query combination."""
+from dataclasses import replace
 import argparse
 import hashlib
 import importlib.metadata
@@ -23,8 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def kernel_inputs(case, geometry, n):
     call = query_factory(case, geometry.index.spec)
     args, kwargs = arguments(case, geometry, n)
-    index_data, *values = args
-    tree, data = index_data
+    prepared, *values = args
+    tree, data = geometry.index.data
     metadata, shapes = (), None
     query = case.query
     if query in RAYS:
@@ -35,16 +36,14 @@ def kernel_inputs(case, geometry, n):
         if query == "all":
             shapes = ((n, kwargs["max_hits"]), (n, kwargs["max_hits"]), (n,), (n,))
     elif query in ("silhouette", "star"):
-        boundary, *values = values
         call = call.query if query == "silhouette" else call.silhouette.query
-        data = boundary.silhouette
-        tree = tree._replace(node_leaf_offset=data.node_feature_offset,
+        data = prepared.silhouette
+        tree = replace(tree, node_leaf_offset=data.node_feature_offset,
                              node_leaf_count=data.node_feature_count, prim_ids=data.feature_refs)
     elif query in ("classify", "sample", "robin"):
-        meta, *values = values
-        metadata = ((meta.core,) if query == "classify" else
-                    (meta,) if query == "sample" else (meta.core, meta.silhouette, meta.coefficients))
-    flat = [*values, *tree, *data, *(a for group, schema in zip(metadata, call.group_types, strict=True)
+        metadata = ((prepared.core,) if query == "classify" else
+                    (prepared,) if query == "sample" else (prepared.core, prepared.silhouette, prepared.coefficients))
+    flat = [*values, *jax.tree.leaves(tree), *data, *(a for group, schema in zip(metadata, call.group_types, strict=True)
                                     for a in struct_arrays(group, schema))]
     return call, flat, shapes
 

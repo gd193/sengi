@@ -8,22 +8,22 @@ from sengi.primitives.data import PointsArrays2, PointsArrays3, PointsData2, Poi
 from sengi.primitives.device import item_functions
 from sengi.primitives.items import PointItem2, PointItem3
 from sengi.primitives.packing import _array_bounds, _array_data, _array_pack
-from sengi.primitives.spec import Primitive
+from sengi.primitives.spec import ArrayPrimitive
 from sengi.warp.contracts import as_warp_function
 
 
 @overload
-def Points(dimension: Literal[2]) -> Primitive[PointsArrays2, PointsData2, PointItem2, wp.vec2]: ...
+def Points(dimension: Literal[2]) -> ArrayPrimitive[PointsArrays2, PointsData2, PointItem2, wp.vec2]: ...
 @overload
-def Points(dimension: Literal[3] = 3) -> Primitive[PointsArrays3, PointsData3, PointItem3, wp.vec3]: ...
+def Points(dimension: Literal[3] = 3) -> ArrayPrimitive[PointsArrays3, PointsData3, PointItem3, wp.vec3]: ...
 @overload
-def Points(dimension: int) -> Primitive[Any, Any, Any, Any]: ...
-def Points(dimension: int = 3) -> Primitive[Any, Any, Any, Any]:
+def Points(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]: ...
+def Points(dimension: int = 3) -> ArrayPrimitive[Any, Any, Any, Any]:
     return _points(dimension)
 
 
 @lru_cache(maxsize=None)
-def _points(dimension: int) -> Primitive[Any, Any, Any, Any]:
+def _points(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]:
     if dimension not in (2, 3):
         raise ValueError("points support 2D or 3D")
     Vec = wp.vec2 if dimension == 2 else wp.vec3
@@ -41,7 +41,7 @@ def _points(dimension: int) -> Primitive[Any, Any, Any, Any]:
     def closest(query: Vec, item: Any):
         return item.a
 
-    return Primitive(
+    return ArrayPrimitive(
         dimension=dimension, point_type=Vec, data_type=Data, item_type=Item,
         load=functions.load, bounds_of_item=functions.bounds,
         host_bounds=_array_bounds, host_pack=_array_pack,

@@ -284,8 +284,8 @@ def test_boundary_device_functions_compose(kind):
     star = bind_star_radius(index.spec)
     robin = bind_robin_radius(index.spec)
     sample = bind_boundary_sample(index.spec)
-    sample_meta = prepare_boundary_sample(tree, boundary)
-    robin_meta = prepare_robin(tree, boundary, 0.5)
+    sample_meta = prepare_boundary_sample(boundary)
+    robin_meta = prepare_robin(boundary, 0.5)
     cf, ov, sf, st, rb, sp = [
         q.device for q in [classification, overlap, silhouette, star, robin, sample]
     ]
@@ -361,12 +361,12 @@ def test_boundary_device_functions_compose(kind):
     wp.launch(kernel, dim=3, inputs=inputs, outputs=outputs, device=device)
     scalars, statuses, vectors = [x.numpy() for x in outputs]
     expected = [
-        classification(index.data, boundary, points),
+        classification(boundary, points),
         overlap(index.data, points - 0.25, points + 0.25),
-        silhouette(index.data, boundary, points, 3.0),
-        star(index.data, boundary, points, 3.0),
-        robin(index.data, robin_meta, points, 3.0),
-        sample(index.data, sample_meta, points, 3.0, np.array([0.1, 0.2, 0.3])),
+        silhouette(boundary, points, 3.0),
+        star(boundary, points, 3.0),
+        robin(robin_meta, points, 3.0),
+        sample(sample_meta, points, 3.0, np.array([0.1, 0.2, 0.3])),
     ]
     refs_scalar = [
         expected[0][0],

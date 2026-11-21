@@ -181,14 +181,14 @@ def test_builtin_query_matrix(case, builder):
                     else:
                         assert index == -1
     elif case.query == "classify":
-        points = np.asarray(args[2])
+        points = np.asarray(args[1])
         expected = np.where(np.max(np.abs(points), axis=1) < 1, -1., 1.)
         np.testing.assert_array_equal(got, [expected, np.ones(len(points))])
     elif case.query in ("silhouette", "star"):
-        queries = np.asarray(args[2], np.float64)
+        queries = np.asarray(args[1], np.float64)
         distances = np.array([_feature_distances(geometry.boundary, q, case.metric) for q in queries])
         expected = distances.min(axis=1, initial=np.inf)
-        caps = np.asarray(args[3])
+        caps = np.asarray(args[2])
         if case.query == "star":
             np.testing.assert_allclose(got[0], np.minimum(expected, caps), atol=5e-6, rtol=3e-5)
             np.testing.assert_array_equal(got[1], 1)
@@ -207,7 +207,7 @@ def test_builtin_query_matrix(case, builder):
                 else:
                     assert index == -1
     elif case.query == "robin":
-        points, caps = map(np.asarray, args[2:])
+        points, caps = map(np.asarray, args[1:])
         expected = [(_robin2(raw, geometry.boundary, q.astype(np.float64), float(cap)) if primitive.dimension == 2
                      else brute_robin_radius(np.asarray(raw.vertices), np.asarray(raw.indices), q.astype(np.float64), 1., float(cap)))
                     for q, cap in zip(points, caps, strict=True)]

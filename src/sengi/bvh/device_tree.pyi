@@ -1,10 +1,12 @@
 """Binary tree array schemas and construction API."""
-from typing import Literal, NamedTuple, TypeVar
+from dataclasses import dataclass
+from typing import Any, Literal, TypeVar
 
 import jax
 import warp as wp
 
 from sengi.bvh.config import Config
+from sengi.bvh.index import IndexSpec
 from sengi.warp.contracts import DeviceArray, PrimitiveSpec
 
 H = TypeVar("H")
@@ -27,7 +29,14 @@ class DeviceTree:
     node_ray_upper: DeviceArray[wp.vec4]
 
 
-class TreeData(NamedTuple):
+@dataclass(frozen=True)
+class _IndexSchema:
+    spec: IndexSpec[Any]
+    geometry_type: type
+
+
+@dataclass(frozen=True, eq=False)
+class TreeData:
     node_lower: jax.Array
     node_upper: jax.Array
     node_left: jax.Array
@@ -37,6 +46,9 @@ class TreeData(NamedTuple):
     prim_ids: jax.Array
     node_ray_lower: jax.Array
     node_ray_upper: jax.Array
+    _schema: _IndexSchema
+
+    def validate_geometry(self, geometry: object, primitive: object) -> None: ...
 
 def build_device_tree(primitive: PrimitiveSpec[H, D, I, P], data: H,
                config: Config | None = ..., *,

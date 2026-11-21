@@ -1,31 +1,35 @@
 """Segment primitive specifications."""
 from functools import lru_cache
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import warp as wp
 
+from sengi.warp.native import package_headers
 from sengi.primitives.data import SegmentsArrays2, SegmentsArrays3, SegmentsData2, SegmentsData3
 from sengi.primitives.device import item_functions
 from sengi.primitives.items import SegmentItem2, SegmentItem3
 from sengi.primitives.packing import _array_bounds, _array_data, _indexed_data, _segment_pack
-from sengi.primitives.spec import Primitive
+from sengi.primitives.spec import ArrayBoundaryPrimitive, ArrayPrimitive
 from sengi.queries.domain import Ray
-from sengi.warp.native import package_headers
 from sengi.warp.contracts import as_warp_function
 
+if TYPE_CHECKING:
+    from sengi.boundary.data import BoundaryCore, BoundaryCoreData, SilhouetteData, SilhouetteMeta
+    from sengi.primitives.items import SilhouetteItem3
+
 
 @overload
-def Segments(dimension: Literal[2]) -> Primitive[SegmentsArrays2, SegmentsData2, SegmentItem2, wp.vec2]: ...
+def Segments(dimension: Literal[2]) -> "ArrayBoundaryPrimitive[SegmentsArrays2, SegmentsData2, SegmentItem2, wp.vec2, BoundaryCoreData, BoundaryCore, SilhouetteData, SilhouetteMeta, SilhouetteItem3]": ...
 @overload
-def Segments(dimension: Literal[3] = 3) -> Primitive[SegmentsArrays3, SegmentsData3, SegmentItem3, wp.vec3]: ...
+def Segments(dimension: Literal[3] = 3) -> ArrayPrimitive[SegmentsArrays3, SegmentsData3, SegmentItem3, wp.vec3]: ...
 @overload
-def Segments(dimension: int) -> Primitive[Any, Any, Any, Any]: ...
-def Segments(dimension: int = 3) -> Primitive[Any, Any, Any, Any]:
+def Segments(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]: ...
+def Segments(dimension: int = 3) -> ArrayPrimitive[Any, Any, Any, Any]:
     return _segments(dimension)
 
 
 @lru_cache(maxsize=None)
-def _segments(dimension: int) -> Primitive[Any, Any, Any, Any]:
+def _segments(dimension: int) -> ArrayPrimitive[Any, Any, Any, Any]:
     if dimension not in (2, 3):
         raise ValueError("segments support 2D or 3D")
     Vec = wp.vec2 if dimension == 2 else wp.vec3
@@ -52,7 +56,9 @@ def _segments(dimension: int) -> Primitive[Any, Any, Any, Any]:
 
         boundary_adapter = _builtin_adapter(2)
 
-    return Primitive(
+    primitive_type = ArrayBoundaryPrimitive if boundary_adapter is not None else ArrayPrimitive
+    boundary = {} if boundary_adapter is None else {"boundary_adapter": boundary_adapter}
+    return primitive_type(
         dimension=dimension, point_type=Vec, data_type=Data, item_type=Item,
         load=functions.load, bounds_of_item=functions.bounds,
         host_bounds=_array_bounds, host_pack=_segment_pack,
@@ -61,7 +67,7 @@ def _segments(dimension: int) -> Primitive[Any, Any, Any, Any]:
         name="segments", payload_type=Payload,
         prepare_data=_array_data(Payload, dimension, 2, "segments", segment=True),
         prepare_indexed=_indexed_data(Payload, dimension, 2),
-        boundary_adapter=boundary_adapter,
         native=package_headers("primitives", "segment_distance.h",
                                *(("segment_crossing.h",) if dimension == 2 else ())),
+        **boundary,
     )

@@ -19,7 +19,7 @@ def result_writer(primitive, ops, candidates, State, k, return_points):
         for slot in range(wp.static(k)):
             distance, point = wp.inf, Point(0.0)
             if slot < count:
-                distance = wp.static(ops.to_distance)(wp.static(get_score)(state.candidates, slot))
+                distance = wp.static(get_score)(state.candidates, slot)
                 item_slot = wp.static(get_slot)(state.candidates, slot)
                 if wp.static(point_at is not None):
                     point = wp.static(point_at)(query, geometry, item_slot)
@@ -49,7 +49,7 @@ def result_writer(primitive, ops, candidates, State, k, return_points):
             distance = wp.inf
             index = int(-1)
             if slot < count:
-                distance = wp.static(ops.to_distance)(wp.static(get_score)(state.candidates, slot))
+                distance = wp.static(get_score)(state.candidates, slot)
                 index = wp.static(get_id)(state.candidates, slot)
                 if not wp.isfinite(distance) or distance < 0.0:
                     state.failed = True
@@ -89,7 +89,7 @@ def custom_result_writer(primitive, ops, candidates, State, k, policy):
             value = wp.inf
             result = Result()
             if index < count:
-                value = wp.static(ops.to_distance)(wp.static(get_score)(state.candidates, index))
+                value = wp.static(get_score)(state.candidates, index)
                 item_slot = wp.static(get_slot)(state.candidates, index)
                 item = wp.static(primitive.load)(geometry, item_slot)
                 if wp.static(point_at is not None):

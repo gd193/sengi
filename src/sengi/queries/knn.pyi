@@ -43,6 +43,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
              k: int, metric: None = ..., *,
+             evaluate: None = ...,
+             lower_bound: None = ...,
+             result_policy: ResultPolicy[PointT, ItemT, PointT, ResultT],
+             predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+             stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
+             packed_nodes: bool = ..., group_leaves: bool | None = ..., return_points: Literal[False] = ...
+             ) -> SelectedKnnQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT, ResultT]: ...
+
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+             k: int, metric: None = ..., *,
              evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]],
              lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float],
              result_policy: ResultPolicy[PointT, ItemT, PointT, ResultT],
@@ -62,6 +73,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
              k: int, metric: None = ..., *,
+             evaluate: None = ...,
+             lower_bound: None = ...,
+             result_policy: IdPoint,
+             predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+             stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
+             packed_nodes: bool = ..., group_leaves: bool | None = ..., return_points: Literal[False] = ...
+             ) -> SelectedKnnQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT, IdPointResult[PointT]]: ...
+
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+             k: int, metric: None = ..., *,
              evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]],
              lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float],
              result_policy: IdPoint,
@@ -78,6 +100,17 @@ def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                  stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
                  packed_nodes: bool = ..., group_leaves: bool | None = ..., return_points: bool = ...
                  ) -> KnnQuery[HostDataT, DeviceDataT, ItemT, PointT, QueryT]: ...
+@overload
+def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
+                 k: int, metric: None = ..., *,
+                 evaluate: None = ...,
+                 lower_bound: None = ...,
+                 predicate: WarpFunction[[PointT, ItemT], bool] | NearestPredicate[DeviceDataT, ItemT, PointT, PointT] | None = ...,
+                 result_policy: None = ...,
+                 stack_capacity: int = ..., block_dim: int = ..., cache_bounds: bool = ...,
+                 packed_nodes: bool = ..., group_leaves: bool | None = ..., return_points: bool = ...
+                 ) -> KnnQuery[HostDataT, DeviceDataT, ItemT, PointT, PointT]: ...
+
 @overload
 def bind(spec: IndexSpec[PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
                  k: int, metric: None = ..., *,

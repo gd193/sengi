@@ -1,16 +1,12 @@
 """Static nearest-query policies; bounds and minimizers share score units."""
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar
+from typing import Any, Callable, Generic, Protocol, TypeVar
 
 from sengi.warp.native import NativeHeaders, package_headers
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
 
 import warp as wp
-
-if TYPE_CHECKING:
-    from sengi.boundary.data import BoundaryCore, SilhouetteMeta
-    from sengi.queries.robin_radius import RobinOps
 
 
 QueryT = TypeVar("QueryT")
@@ -62,8 +58,6 @@ class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
              ops: NearestOps[QueryT, ItemT, PointT]) -> WarpFunction[[QueryT, ItemT], bool]: ...
 
 
-
-
 _BOX_HEADERS = package_headers(
     "metrics", "box_distance.h", dependencies=("metrics/native/rounding.h",),
 )
@@ -72,6 +66,16 @@ _ANGULAR_HEADERS = package_headers("metrics", "angular.h")
 
 @wp.func_native("return bvh::conservative_box_score(query, lower, upper);")
 def _conservative_box_score(query: wp.vec3, lower: wp.vec3, upper: wp.vec3) -> float: ...
+
+
+@wp.func
+def _identity_score(value: float):
+    return value
+
+
+@wp.func
+def _euclidean_distance(score: float):
+    return wp.sqrt(score)
 
 
 @dataclass(frozen=True)
@@ -96,26 +100,16 @@ class NearestCallbacks(Generic[ItemT, PointT]):
             return point, wp.where(wp.isfinite(score) and score >= 0.0, score, wp.nan)
 
         @wp.func
-        def identity(score: float):
-            return score
-
-        @wp.func
         def cull_limit(query: Vec, score: float):
             return score
 
         return NearestOps(Vec, (dimension,), valid, self.lower_bound, closest,
-                          identity, identity, cull_limit,
+                          _identity_score, _identity_score, cull_limit,
                           group_leaves=getattr(primitive, "point_bounds", False), native=self.native)
 
 
 @dataclass(frozen=True)
 class Euclidean:
-    def bind_robin(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]
-                   ) -> "RobinOps[PointT, DeviceDataT, ItemT, BoundaryCore, SilhouetteMeta]":
-        """Select the primitive's conservative Euclidean Robin capability."""
-        from sengi.boundary.data import _adapter_policy
-        return _adapter_policy(primitive, "robin")
-
     @lru_cache(maxsize=None)
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[PointT, ItemT, PointT]:
         closest_primitive = getattr(primitive, "closest_euclidean", None)
@@ -151,10 +145,6 @@ class Euclidean:
             return distance*distance
 
         @wp.func
-        def to_distance(score: float):
-            return wp.sqrt(score)
-
-        @wp.func
         def cull_limit(query: Vec, score: float):
             return score*1.000002 + 1.e-12*wp.dot(query, query)
 
@@ -184,7 +174,7 @@ class Euclidean:
             # The primitive's fast path requires the original score policy.
             return bind_primitive_fused(primitive) if ops == bound else None
 
-        bound = NearestOps(Vec, (dimension,), valid, node_bound, closest, to_score, to_distance,
+        bound = NearestOps(Vec, (dimension,), valid, node_bound, closest, to_score, _euclidean_distance,
                            cull_limit, viewpoint=viewpoint, group_leaves=group_leaves,
                            cache_nearest_bounds=getattr(primitive, "cache_nearest_bounds", True),
                            score_at=score_at, point_at=point_at,
@@ -222,10 +212,6 @@ class Angular:
                 return wp.vec3(result[0], result[1], result[2]), result[3]
 
         @wp.func
-        def identity(value: float):
-            return value
-
-        @wp.func
         def cull_limit(query: Query, score: float):
             return score + 4.e-7
 
@@ -237,7 +223,7 @@ class Angular:
                 return wp.vec3(query[0, 0], query[0, 1], query[0, 2])
 
         return NearestOps(Query, (2, dimension), valid, bound, closest,
-                          identity, identity, cull_limit, viewpoint=viewpoint, native=_ANGULAR_HEADERS)
+                          _identity_score, _identity_score, cull_limit, viewpoint=viewpoint, native=_ANGULAR_HEADERS)
 
 
 @dataclass(frozen=True)

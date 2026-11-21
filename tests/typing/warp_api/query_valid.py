@@ -3,7 +3,7 @@ from sengi.bvh.device_tree import TreeData
 from sengi import bvh
 import warp as wp
 from sengi.queries.domain import ClassificationOps, RayOps
-from sengi.boundary.sampling import MeasureOps
+from sengi.boundary.sampling import MeasureOps, SamplingData
 from sengi.queries.boundary_sample import RegionOps
 from sengi.queries.boundary_sample import bind as bind_boundary_sample
 from sengi.queries.classification import bind as bind_classification
@@ -14,7 +14,7 @@ from tests.typing.warp_api.query_extension import (
     Cursor, ExternalMetadata, ExternalRobinMetric, MetadataArrays, classification_event, intersect, metadata_valid,
     next_hit, region_contains, region_overlaps, region_valid, sample,
 )
-from sengi.boundary.data import BoundaryCore, SilhouetteMeta
+from sengi.boundary.data import BoundaryCore, BoundaryData, SilhouetteMeta
 from sengi.queries.robin_radius import RobinOps
 from sengi.queries.robin_radius import bind as bind_robin_radius
 from tests.typing.warp_api.query_extension import (
@@ -22,7 +22,6 @@ from tests.typing.warp_api.query_extension import (
     robin_valid, score_to_radius,
 )
 import jax
-from sengi.boundary.sampling import SamplingData
 from sengi.queries.silhouette import bind as bind_silhouette
 from sengi.queries.star_radius import bind as bind_star_radius
 from sengi.metrics.nearest import NearestCallbacks
@@ -56,28 +55,29 @@ robin_from_metric = bind_robin_radius(bvh.IndexSpec(primitive), metric=ExternalR
 
 
 def invoke(tree: TreeData, geometry: ExternalArrays, arrays: jax.Array,
-           sampling: SamplingData, metadata: MetadataArrays) -> None:
-    classify(bvh.IndexData(tree, geometry), metadata, arrays)
+           sampling: SamplingData[ExternalArrays], metadata: MetadataArrays) -> None:
+    classify(BoundaryData(bvh.IndexData(tree, geometry), metadata), arrays)
     ray(bvh.IndexData(tree, geometry), arrays, arrays)
     stateful_ray(bvh.IndexData(tree, geometry), arrays, arrays, max_hits=4)
-    sampler(bvh.IndexData(tree, geometry), sampling, arrays, 1.0, arrays)
+    sampler(sampling, arrays, 1.0, arrays)
     overlap(bvh.IndexData(tree, geometry), arrays, arrays)
 
 silhouette_query = bind_silhouette(bvh.IndexSpec(primitive), NearestCallbacks(external_evaluate, external_bound), adapter=external_adapter)
 star_query = bind_star_radius(bvh.IndexSpec(primitive), adapter=external_adapter)
 
-def invoke_features(tree: TreeData, geometry: ExternalArrays, features: FeatureArrays, arrays: jax.Array) -> None:
-    silhouette_query(bvh.IndexData(tree, geometry), features, arrays)
-    star_query(bvh.IndexData(tree, geometry), features, arrays, 10.0)
+def invoke_features(tree: TreeData, geometry: ExternalArrays, core: BoundaryCoreData,
+                    features: FeatureArrays, arrays: jax.Array) -> None:
+    silhouette_query(BoundaryData(bvh.IndexData(tree, geometry), core, features), arrays)
+    star_query(BoundaryData(bvh.IndexData(tree, geometry), core, features), arrays, 10.0)
 
 builtin_ray_ops: RayOps[PointsData3, int] = RayOps(intersect=builtin_intersect)
 builtin_ray = bind_rays(bvh.IndexSpec(Points(3)), ops=builtin_ray_ops)
 
 
-def invoke_robin(tree: TreeData, geometry: ExternalArrays, metadata: RobinData[BoundaryCoreData, SilhouetteData],
+def invoke_robin(metadata: RobinData[ExternalArrays, BoundaryCoreData, SilhouetteData],
                  arrays: jax.Array) -> None:
-    robin_query(bvh.IndexData(tree, geometry), metadata, arrays)
-    robin_from_metric(bvh.IndexData(tree, geometry), metadata, arrays)
+    robin_query(metadata, arrays)
+    robin_from_metric(metadata, arrays)
 
 
 def construct_boundary(geometry: ExternalArrays) -> tuple[BoundaryCoreData, FeatureArrays | None]:

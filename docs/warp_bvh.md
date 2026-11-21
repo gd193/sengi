@@ -34,17 +34,17 @@ can cross JIT and vmap boundaries.
 
 ## Query families
 
-| Binding | JAX inputs after index data | Output |
+| Binding | JAX inputs | Output |
 | --- | --- | --- |
-| `queries.nearest.bind(spec, metric)` | points, optional distance cap | point, value, ID, status |
-| `queries.knn.bind(spec, k, metric)` | points, optional distance cap | values, IDs or points, count, status |
-| `queries.radius.bind(spec, metric, mode="count")` | points, radius | count, status |
-| `queries.rays.bind(spec, "first")` | origin, direction, optional maximum and minimum parameter | time, ID, hit flag, status |
-| `queries.rays.bind(spec, "any")` | origin, direction, optional maximum and minimum parameter | hit flag, status |
-| `queries.rays.bind(spec, "count")` | origin, direction, optional maximum and minimum parameter | count, status |
-| `queries.rays.bind(spec, "all")` | origin, direction, optional maximum and minimum parameter, static `max_hits` | times, IDs, full count, status |
-| `queries.overlap.bind(spec)` | box lower and upper corners | primitive-AABB overlap, status |
-| `queries.region.bind(spec, policy)` | box lower and upper corners | exact geometric overlap, status |
+| `queries.nearest.bind(spec, metric)` | index data, points, optional distance cap | point, value, ID, status |
+| `queries.knn.bind(spec, k, metric)` | index data, points, optional distance cap | values, IDs or points, count, status |
+| `queries.radius.bind(spec, metric, mode="count")` | index data, points, radius | count, status |
+| `queries.rays.bind(spec, "first")` | index data, origin, direction, optional maximum and minimum parameter | time, ID, hit flag, status |
+| `queries.rays.bind(spec, "any")` | index data, origin, direction, optional maximum and minimum parameter | hit flag, status |
+| `queries.rays.bind(spec, "count")` | index data, origin, direction, optional maximum and minimum parameter | count, status |
+| `queries.rays.bind(spec, "all")` | index data, origin, direction, optional maximum and minimum parameter, static `max_hits` | times, IDs, full count, status |
+| `queries.overlap.bind(spec)` | index data, box lower and upper corners | primitive-AABB overlap, status |
+| `queries.region.bind(spec, policy)` | index data, box lower and upper corners | exact geometric overlap, status |
 | `queries.classification.bind(spec)` | boundary metadata, points | sign, status |
 | `queries.silhouette.bind(spec)` | boundary metadata, points, optional distance cap | point, distance, feature ID, status |
 | `queries.star_radius.bind(spec)` | boundary metadata, points, cap | radius, status |
@@ -55,9 +55,11 @@ Ordinary candidate queries use status `1` for a match, `0` for a miss and
 `-1` for invalid inputs or traversal failure. Ray intervals and distance caps
 are closed. Use `exclude=True` when binding ray queries that take an
 `exclude_face`. An all-hit query returns the full count even when capacity is
-insufficient, with status `2` for truncation. kNN specializes on a positive
-static `k` and pads with infinite scores and ID `-1`. Custom metrics can
-define the units of the score and cap. The Euclidean metric reports distance.
+insufficient, with status `-2` for truncation. kNN specializes on a positive
+static `k` and pads with infinite values and ID `-1`. Nearest, kNN and radius
+use Euclidean distance by default. Nearest and kNN rank equally valued
+results by original primitive ID. Custom metrics can define the units of
+the score and cap.
 Exact region queries use `point_region_policy`, `segment_region_policy`,
 `triangle_region_policy`, or a custom `RegionIntersectionPolicy` from
 `sengi.queries.region`.
@@ -65,9 +67,11 @@ Exact region queries use `point_region_policy`, `segment_region_policy`,
 ## Indexed boundaries
 
 Pass the same indexed source used to build the BVH to
-`bvh.prepare_boundary`. This prepares adjacency and core attributes.
+`bvh.prepare_boundary`. The prepared boundary holds the packed index data alongside its adjacency and core attributes. Pass it directly to boundary queries.
 The default also prepares silhouette features. Use `silhouettes=False`
-for classification or sampling without silhouette features.
+for classification or sampling without silhouette features. For a primitive
+without a declared boundary adapter, pass `adapter=` to prepare the boundary
+and to bind queries that use adapter-supplied operations.
 
 ```python
 import jax.numpy as jnp
@@ -86,14 +90,14 @@ index = bvh.build(primitive, source)
 boundary = bvh.prepare_boundary(index, source)
 points = jnp.array([[0.1, 0.1, 0.1]])
 
-sign, status = queries.classification.bind(index.spec)(index.data, boundary, points)
-sampling = prepare_boundary_sample(index.data.tree, boundary)
+sign, status = queries.classification.bind(index.spec)(boundary, points)
+sampling = prepare_boundary_sample(boundary)
 sample = queries.boundary_sample.bind(index.spec)
 point, normal, pdf, face, status = sample(
-    index.data, sampling, points, jnp.inf, jnp.array([[.2, .3, .4]]),
+    sampling, points, jnp.inf, jnp.array([[.2, .3, .4]]),
 )
-robin = prepare_robin(index.data.tree, boundary, minimum=1.0)
-radius, status = queries.robin_radius.bind(index.spec)(index.data, robin, points, 0.5)
+robin = prepare_robin(boundary, minimum=1.0)
+radius, status = queries.robin_radius.bind(index.spec)(robin, points, 0.5)
 ```
 
 Classification uses even-odd parity for closed indexed surfaces. The sign
