@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Tuple, cast
 
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.base import MeshAccelerator
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.accelerators.registry import get_backend
-from surfaces.explicit.primitives import Primitives
+from sengi.base import MeshAccelerator
+from sengi.protocol import Config
+from sengi.registry import get_backend
+from sengi.primitives import Primitives
 
 from .backends._warp_layout import WarpBVHPayload
 

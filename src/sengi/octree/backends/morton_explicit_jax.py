@@ -11,9 +11,9 @@ from typing import Tuple
 import numpy as np
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.accelerators.octree.payload import OctreePayload
-from surfaces.explicit.primitives import Primitives
+from sengi.protocol import Config
+from sengi.octree.payload import OctreePayload
+from sengi.primitives import Primitives
 
 
 _INDEX_DTYPE = jnp.int32

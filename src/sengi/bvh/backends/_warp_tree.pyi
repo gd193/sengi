@@ -4,7 +4,7 @@ from typing import Literal, NamedTuple, TypeVar
 import jax
 import warp as wp
 
-from surfaces.explicit.accelerators.protocol import Config
+from sengi.protocol import Config
 from .warp_queries.contracts import DeviceArray, PrimitiveSpec
 
 H = TypeVar("H")

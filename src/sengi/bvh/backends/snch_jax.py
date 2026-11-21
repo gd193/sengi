@@ -11,8 +11,8 @@ from typing import NamedTuple, Tuple
 import numpy as np
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.primitives import Primitives, TriMeshPrimitives
+from sengi.protocol import Config
+from sengi.primitives import Primitives, TriMeshPrimitives
 
 
 _INDEX_DTYPE = jnp.int32

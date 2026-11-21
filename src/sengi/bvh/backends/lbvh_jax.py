@@ -9,9 +9,9 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.accelerators.bvh.payload import BVHPayload
-from surfaces.explicit.primitives import Primitives
+from sengi.protocol import Config
+from sengi.bvh.payload import BVHPayload
+from sengi.primitives import Primitives
 
 
 # We use the shared BVHPayload directly: Karras LBVH produces (node

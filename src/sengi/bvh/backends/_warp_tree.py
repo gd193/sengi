@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
-from surfaces.explicit.accelerators.protocol import Config
+from sengi.protocol import Config
 from . import lbvh_jax, sah_jax
 from ._warp_layout import _int32_array, _pack_ray_nodes, _validate_tree
 from .warp_queries.contracts import warp_struct

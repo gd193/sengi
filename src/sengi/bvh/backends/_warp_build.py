@@ -6,8 +6,8 @@ from functools import partial
 import jax.numpy as jnp
 import numpy as np
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.primitives import Primitives, TriMeshPrimitives
+from sengi.protocol import Config
+from sengi.primitives import Primitives, TriMeshPrimitives
 
 from ._warp_boundary import BoundaryData, SilhouetteData, _triangles_core
 from ._warp_host_metadata import reduce_nodes

@@ -4,8 +4,8 @@ import pytest
 
 pytest.importorskip("warp")
 
-from surfaces.explicit.accelerators.bvh.warp import Points, build_tree  # noqa: E402
-from surfaces.explicit.accelerators.protocol import Config  # noqa: E402
+from sengi.bvh.warp import Points, build_tree  # noqa: E402
+from sengi.protocol import Config  # noqa: E402
 
 
 def test_lbvh_duplicate_morton_codes_leaf_sizes_and_depth():

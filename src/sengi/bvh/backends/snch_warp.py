@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.accelerators.registry import register_backend
-from surfaces.explicit.primitives import Primitives
+from sengi.protocol import Config
+from sengi.registry import register_backend
+from sengi.primitives import Primitives
 
 from ._warp_build import build_warp_mesh
 from .sah_warp import BVHSahWarpBackend

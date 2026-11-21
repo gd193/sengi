@@ -12,9 +12,9 @@ from typing import Tuple
 import numpy as np
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Config
-from surfaces.explicit.accelerators.kd.payload import KdPayload
-from surfaces.explicit.primitives import Primitives
+from sengi.protocol import Config
+from sengi.kd.payload import KdPayload
+from sengi.primitives import Primitives
 
 
 _INDEX_DTYPE = jnp.int32

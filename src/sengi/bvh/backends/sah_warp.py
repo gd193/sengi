@@ -5,9 +5,9 @@ from typing import Tuple
 
 import jax.numpy as jnp
 
-from surfaces.explicit.accelerators.protocol import Backend, Config
-from surfaces.explicit.accelerators.registry import register_backend
-from surfaces.explicit.primitives import Primitives
+from sengi.protocol import Backend, Config
+from sengi.registry import register_backend
+from sengi.primitives import Primitives
 
 from ._warp_build import build_warp_mesh
 from ._warp_layout import WarpBVHPayload

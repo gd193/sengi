@@ -7,11 +7,13 @@ intersection and closest-point operations.
 from __future__ import annotations
 
 import abc
-from typing import Tuple
+from typing import Protocol, Tuple
 
 import jax.numpy as jnp
 
-from surfaces.base import TriMesh
+class TriangleMesh(Protocol):
+    vertices: jnp.ndarray
+    faces: jnp.ndarray
 
 
 class Primitives(abc.ABC):
@@ -46,7 +48,7 @@ class TriMeshPrimitives(Primitives):
     vectors, normals, AABBs) for construction and surface normals.
     """
 
-    def __init__(self, mesh: TriMesh):
+    def __init__(self, mesh: TriangleMesh):
         self.mesh = mesh
         v = mesh.vertices[mesh.faces]              # (F, 3, 3)
         self._v0 = v[:, 0]

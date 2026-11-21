@@ -7,7 +7,7 @@ from typing import Generic, Tuple, Type, TypeVar
 
 import jax.numpy as jnp
 
-from surfaces.explicit.primitives import Primitives
+from sengi.primitives import Primitives
 
 
 P = TypeVar("P", bound=tuple)

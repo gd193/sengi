@@ -17,7 +17,7 @@ from typing import Tuple
 
 import jax.numpy as jnp
 
-from surfaces.explicit.primitives import Primitives
+from sengi.primitives import Primitives
 
 
 class MeshAccelerator(abc.ABC):

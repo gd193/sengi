@@ -1,0 +1,28 @@
+{
+  "include": [
+    "src/sengi/bvh/backends/warp_queries/contracts.py",
+    "src/sengi/bvh/backends/warp_queries/primitives/items.py",
+    "src/sengi/bvh/backends/warp_queries/metrics.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/nearest.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/overlap.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/rays.pyi",
+    "src/sengi/bvh/backends/warp_queries/domain.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/silhouette.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/boundary.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/classification.pyi",
+    "src/sengi/bvh/backends/_warp_boundary.pyi",
+    "src/sengi/bvh/backends/warp_queries/primitives/data.py",
+    "src/sengi/bvh/backends/_warp_tree.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/knn.pyi",
+    "src/sengi/bvh/backends/warp_queries/traversal/policy.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/range.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/region.pyi",
+    "src/sengi/bvh/backends/warp_queries/queries/results.pyi"
+  ],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.11",
+  "extraPaths": [
+    "src"
+  ],
+  "reportMissingTypeStubs": false
+}

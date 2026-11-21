@@ -1,0 +1,27 @@
+package:
+  name: sengi
+  version: 0.1.0
+source:
+  path: ..
+build:
+  number: 0
+  noarch: python
+  script:
+    - python -m build --wheel --no-isolation
+    - python -m installer dist/*.whl
+requirements:
+  host:
+    - python 3.11.*
+    - python-build
+    - hatchling
+    - python-installer
+  run:
+    - python >=3.11
+    - jax
+    - numpy
+  run_constraints:
+    - warp-lang ==1.18.0
+tests:
+  - script:
+      - python -c "from sengi import BVHAccelerator"
+      - python -c "from importlib.resources import files; assert (files('sengi') / 'bvh/backends/native/query.h').is_file()"
