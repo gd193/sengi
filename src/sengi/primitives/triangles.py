@@ -11,7 +11,15 @@ from sengi.primitives.items import TriangleItem3
 from sengi.primitives.packing import _indexed_data
 from sengi.primitives.spec import Primitive
 from sengi.queries.domain import Ray
+from sengi.warp.native import package_headers
 from sengi.warp.contracts import FusedNearestOps, as_warp_function
+
+
+_NATIVE = package_headers(
+    "primitives", "triangle_nearest.h", "triangle_crossing.h",
+    dependencies=("primitives/native/triangle_distance.h", "primitives/native/determinant.h",
+                  "metrics/native/box_distance.h", "metrics/native/rounding.h"),
+)
 
 
 def _triangle_bounds(data):
@@ -102,5 +110,5 @@ def Triangles() -> Primitive[TrianglesArrays3, TrianglesData3, TriangleItem3, wp
         intersect=as_warp_function(intersect),
         group_leaves=True, cache_nearest_bounds=False, name="triangles", payload_type=Payload,
         prepare_data=prepare_data, prepare_indexed=prepare_indexed,
-        boundary_adapter=_builtin_adapter(3), bind_fused_euclidean=bind_fused_euclidean,
+        boundary_adapter=_builtin_adapter(3), bind_fused_euclidean=bind_fused_euclidean, native=_NATIVE,
     )

@@ -1,16 +1,15 @@
 """Fused generic k-nearest queries with fixed-capacity candidate storage."""
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import jax.numpy as jnp
 import warp as wp
 
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.queries.nearest import prepare_nearest
 from sengi.metrics.specialization import bind_nearest as _bind_nearest, nearest_functions, resolve_metric
 from sengi.queries.results import resolve_result
-from sengi.queries.candidates import REGISTER_LIMIT, candidate_functions, configure_candidate_module
+from sengi.queries.candidates import REGISTER_LIMIT, candidate_build_options, candidate_functions
 from sengi.queries.output import custom_result_writer, result_writer
 from sengi.warp.arrays import load_array
 from sengi.bvh.traversal.scheduling import make_walk
@@ -82,7 +81,7 @@ def bind(spec, k, metric=None, *, evaluate=None, lower_bound=None, predicate=Non
                      result_policy=result_policy)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_knn(primitive, k, metric, *, predicate=None,
               stack_capacity=STACK_CAPACITY, block_dim=64, cache_bounds=True,
               packed_nodes=True, group_leaves=False, return_points=False,
@@ -173,7 +172,8 @@ def _make_knn(primitive, k, metric, *, predicate=None,
                   ("output", "custom_struct" if result_policy is not None else "coordinates" if return_points else "ids"))
     QueryClass = SelectedKnnQuery if result_policy is not None else KnnQuery
     options = {"result_policy": result_policy} if result_policy is not None else {}
-    query = bind_query(QueryClass, "knn_kernel", primitive, inputs, outputs, body, {"knn": knn},
-                       block_dim, device=knn, ops=ops, k=k, return_points=return_points, components=components, **options)
-    configure_candidate_module(query.kernel.module, candidates, k, return_points or result_policy is not None)
-    return query
+    return bind_query(QueryClass, "knn_kernel", primitive, inputs, outputs, body, {"knn": knn},
+                       block_dim, device=knn, ops=ops, k=k, return_points=return_points, components=components,
+                      native_providers=(ops, metric, predicate, result_policy),
+                      native_requirements=(candidate_build_options(candidates, k, return_points or result_policy is not None),),
+                      max_unroll=max(16, min(k, REGISTER_LIMIT)), **options)

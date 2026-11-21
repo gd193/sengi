@@ -6,6 +6,7 @@ import jax
 import warp as wp
 from jax.typing import ArrayLike
 
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction
 from sengi.warp.launch import BoundQuery
 from sengi.bvh.device_tree import DeviceTree
@@ -20,6 +21,7 @@ PointT = TypeVar("PointT")
 @dataclass(frozen=True)
 class RegionIntersectionPolicy(Generic[DeviceDataT]):
     intersects: WarpFunction[[DeviceDataT, int, wp.vec3, wp.vec3], bool]
+    native: NativeHeaders | None = None
 
 @overload
 def point_region_policy(dimension: Literal[2]) -> RegionIntersectionPolicy[PointsData2]: ...

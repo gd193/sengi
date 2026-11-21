@@ -1,14 +1,14 @@
 """Ray queries using the shared BVH walker."""
 from dataclasses import dataclass
-from functools import lru_cache
 from operator import index
 from typing import Any, Generic, TypeVar
 
 import jax.numpy as jnp
 import warp as wp
 
+from sengi.warp.native import package_headers
 from sengi.queries.domain import Ray, RayOps, prepare_ray
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.jax.ffi import _crossing_args
 from sengi.warp.contracts import make_struct
 from sengi.warp.arrays import load_array, store_array
@@ -62,6 +62,9 @@ class RayQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT, ModeT]
         return result
 
 
+_RAY_HEADERS = package_headers("queries", "rays.h")
+
+
 @wp.func_native("return bvh::ray_box(ray, lower, upper, minimum, maximum, dimension);")
 def ray_box(ray: Ray, lower: wp.vec3, upper: wp.vec3,
             minimum: float, maximum: float, dimension: int) -> wp.vec2: ...
@@ -93,7 +96,7 @@ def bind(spec, mode="first", *, ops=None, exclude=False,
     return _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     if mode not in ("first", "any", "count", "all"):
         raise ValueError("ray mode must be first, any, count, or all")
@@ -300,6 +303,7 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
             f"tree, geometry, {times}, {faces}, out_count, out_status)"]
     return bind_query(RayQuery, "ray_kernel", primitive, inputs, outputs, body,
                       {"ray_query": ray_query}, block_dim, device=device, mode=mode, exclusion=exclusion, handlers=handlers,
+                      native_providers=(ops,), native_requirements=(_RAY_HEADERS._build_options(),),
                       components=(("mode", mode),
                                   ("hit_evaluation", handlers.evaluation),
                                   ("output", "times_and_faces" if store_times else "count_and_status")))

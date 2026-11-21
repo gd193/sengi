@@ -1,5 +1,5 @@
 #pragma once
-#include "traversal.h"
+#include "../../bvh/traversal/native/traversal.h"
 
 namespace bvh {
 // The host specialization selects register-list or heap storage.

@@ -5,6 +5,7 @@ from typing import Callable, Generic, NamedTuple, TypeVar
 import warp as wp
 from jax.typing import ArrayLike
 
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.data import BoundaryData
 from sengi.bvh.device_tree import TreeData
 from sengi.warp.contracts import DeviceArray, WarpFunction
@@ -29,6 +30,7 @@ class SamplingData(NamedTuple):
 class MeasureOps(Generic[ItemT, P, CH]):
     sample: WarpFunction[[ItemT, wp.vec2], tuple[P, P, float]]
     weights: Callable[[CH], ArrayLike] | None = ...
+    native: NativeHeaders | None = None
 
 
 def prepare_boundary_sample(tree: TreeData, boundary: BoundaryData[CH, FH] | CH,

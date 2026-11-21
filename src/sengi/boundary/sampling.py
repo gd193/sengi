@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.metadata import _reduce_nodes
 from sengi.warp.contracts import warp_struct
 
@@ -32,6 +33,7 @@ class MeasureOps(Generic[ItemT, P, CH]):
     """sample(item, uniforms2) returns point, normal and conditional density."""
     sample: Any
     weights: Any = None
+    native: NativeHeaders | None = None
 
 
 def prepare_boundary_sample(tree, boundary, measure=None):

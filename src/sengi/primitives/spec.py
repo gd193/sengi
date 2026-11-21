@@ -6,6 +6,7 @@ import jax
 import numpy as np
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.queries.domain import Ray
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
 
@@ -53,6 +54,7 @@ class Primitive(Generic[HostDataT, DeviceDataT, ItemT, PointT]):
         [PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]],
         FusedNearestOps[PointT, DeviceDataT, ItemT, PointT] | None,
     ] | None = None
+    native: NativeHeaders | None = None
 
     def data(self, *arrays: Any) -> HostDataT:
         if self.prepare_data is None:

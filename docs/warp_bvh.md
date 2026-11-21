@@ -116,6 +116,43 @@ query needs it. Use the concrete item types in `sengi.primitives.items` for
 extensions to built-in primitives. Triangle items expose their original
 vertices through `a`, `b` and `c`.
 
+### Native provider headers
+
+For callbacks implemented with `@wp.func_native`, ship the C++ headers in your
+wheel and attach a `NativeHeaders` declaration to your primitive's `native`
+attribute or the `native=` field of its `Primitive` descriptor. Use an ordinary
+filesystem installation so Warp can read the headers directly.
+
+```python
+from pathlib import Path
+
+from sengi.warp.native import NativeHeaders
+
+include = Path(__file__).resolve().parent / "native"
+quad_headers = NativeHeaders(
+    include_dirs=(include,),
+    headers=("quad.h",),
+    dependencies=(include / "quad_helper.h",),
+)
+```
+
+List entry headers in include order and declare every transitive package-local
+file under `dependencies`. Use quoted, header-relative includes for adjacent
+helpers or distinct package-qualified names for shared include directories.
+Sengi passes the same declaration to Warp's CPU and
+CUDA compilers and tracks both entry and dependency contents. Use your own C++
+namespace and make the headers safe to include more than once. A metric can
+declare its headers in the `NearestOps` returned by its `bind` method or in
+`NearestCallbacks`. Static query operation descriptors such as `RayOps` and
+`ClassificationOps` also accept `native=`.
+
+Bind a new query and retrace its JAX function after changing a header. For a
+caller-owned Warp kernel, call `configure_query_kernel(kernel, *queries)` again
+before launching to refresh the compiled module. Both paths retain dependencies
+shared by several composed queries only once.
+
+### Query policies
+
 A nearest metric implements evaluation and a conservative AABB lower bound.
 Use the same units for both. The lower bound must never exceed the score of
 any candidate in its subtree. The `NearestCallbacks` policy packages the

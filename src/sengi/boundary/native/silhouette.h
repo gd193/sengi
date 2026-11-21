@@ -1,5 +1,5 @@
 #pragma once
-#include "segment_distance.h"
+#include "../../primitives/native/segment_distance.h"
 
 namespace bvh {
 

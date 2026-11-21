@@ -6,6 +6,7 @@ import jax
 import warp as wp
 from jax.typing import ArrayLike
 
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.sampling import MeasureOps, SamplingData, SamplingMeta
 from sengi.bvh.device_tree import DeviceTree
 from sengi.bvh.index import IndexData, IndexSpec
@@ -27,6 +28,7 @@ class RegionOps(Generic[Q, P]):
     valid: WarpFunction[[Q, float], bool]
     overlaps: WarpFunction[[Q, float, wp.vec3, wp.vec3], bool]
     contains: WarpFunction[[Q, float, P], bool]
+    native: NativeHeaders | None = None
 
 
 class BoundarySampleQuery(BoundQuery, Generic[H, D, ItemT, P, Q]):

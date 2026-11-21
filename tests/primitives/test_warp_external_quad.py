@@ -1,6 +1,8 @@
 """An indexed convex quad extends nearest through the public primitive API."""
 from sengi import bvh
 from dataclasses import dataclass
+from pathlib import Path
+import shutil
 from typing import NamedTuple
 
 import jax
@@ -12,6 +14,8 @@ wp = pytest.importorskip("warp")
 
 from sengi.bvh.device_tree import DeviceTree
 from sengi.metrics.nearest import Euclidean
+from sengi.queries.knn import bind as bind_knn
+from sengi.warp.native import NativeHeaders
 from sengi.queries.nearest import bind as bind_nearest
 from sengi.queries.rays import bind as bind_rays
 from sengi.bvh import Config  # noqa: E402
@@ -114,3 +118,84 @@ def test_external_indexed_quads_nearest():
     args = [device_payload(DeviceTree, tree, device), device_payload(QuadData, data, device)]
     ids, = run_kernel(caller, 1, args, [(1, int)], queries=(nearest,), device=device)
     np.testing.assert_array_equal(ids, [0])
+
+
+@wp.func_native("return external_quad::closest(query, item);")
+def closest_native(query: wp.vec3, item: Quad) -> wp.vec3: ...
+
+
+@dataclass(frozen=True)
+class NativeQuads(PlanarQuads):
+    native: NativeHeaders
+    closest_euclidean = closest_native
+
+
+@pytest.mark.parametrize("device_name", ["cpu", "cuda:0"])
+def test_external_native_quads_and_helper_edit(tmp_path, device_name):
+    if device_name == "cuda:0" and not wp.is_cuda_available():
+        pytest.skip("CUDA device required")
+    fixtures = Path(__file__).with_name("native")
+    entry = tmp_path / "quad.h"
+    helper = tmp_path / "quad_helper.h"
+    shutil.copy(fixtures / entry.name, entry)
+    shutil.copy(fixtures / helper.name, helper)
+    primitive = NativeQuads(NativeHeaders((tmp_path,), (entry.name,), (helper,)))
+    device = wp.get_device(device_name)
+    jax_device = jax.devices("cuda" if device.is_cuda else "cpu")[0]
+    with jax.default_device(jax_device):
+        vertices = jnp.array([[0, 0, 0], [3, 0, 0], [2, 2, 0], [0, 2, 0]], dtype=jnp.float32)
+        raw = QuadArrays(vertices, jnp.arange(4, dtype=jnp.int32).reshape(1, 4))
+        index = bvh.build(primitive, raw, builder="lbvh")
+    tree, data = index.data
+    args = [device_payload(DeviceTree, tree, device), device_payload(QuadData, data, device)]
+    nearest = bind_nearest(index.spec)
+    knn = bind_knn(index.spec, 1, Euclidean(), return_points=True)
+    assert bind_nearest(index.spec) is nearest
+    closest, neighbors = nearest.device, knn.device
+
+    @wp.kernel(module="unique", enable_backward=False)
+    def caller(tree: DeviceTree, geometry: QuadData, out_nearest: wp.array(dtype=wp.vec3),
+               out_scores: wp.array2d(dtype=float), out_points: wp.array2d(dtype=wp.vec3)):
+        point, distance, index, status = wp.static(closest)(wp.vec3(1., 1., 2.), 10., tree, geometry)
+        out_nearest[0] = point
+        wp.static(neighbors)(wp.vec3(1., 1., 2.), 10., tree, geometry, out_scores, out_points, 0)
+
+    def run_caller(queries):
+        return run_kernel(caller, 1, args, [(1, wp.vec3), ((1, 1), float), ((1, 1), wp.vec3)],
+                          queries=queries, device=device)
+
+    def run_jax(nearest, knn):
+        with jax.default_device(jax_device):
+            point = jnp.array([[1., 1., 2.]], dtype=jnp.float32)
+            found, distance, ids, status = jax.jit(nearest)(index.data, point)
+            scores, neighbors, count, knn_status = jax.jit(knn)(index.data, point)
+        np.testing.assert_array_equal(ids, [0])
+        np.testing.assert_array_equal(status, [1])
+        np.testing.assert_array_equal(count, [1])
+        np.testing.assert_array_equal(knn_status, [1])
+        np.testing.assert_allclose(distance, scores[:, 0])
+        return found, neighbors
+
+    initial_point = [[1., 1., 0.]]
+    changed_point = [[1.25, 1., 0.]]
+    first, _, first_knn = run_caller((nearest, knn))
+    np.testing.assert_allclose(first, initial_point)
+    np.testing.assert_allclose(first_knn[:, 0], initial_point)
+    found, neighbors_jax = run_jax(nearest, knn)
+    np.testing.assert_allclose(found, initial_point)
+    np.testing.assert_allclose(neighbors_jax[:, 0], initial_point)
+    caller_hash = caller.module.get_module_hash()
+    nearest_hash = nearest.kernel.module.get_module_hash()
+    helper.write_text(helper.read_text().replace("0.0f", "0.25f"))
+
+    # Reconfigure the same caller and rebind generated queries with the edited helper.
+    second, _, second_knn = run_caller((nearest, knn))
+    assert caller.module.get_module_hash() != caller_hash
+    np.testing.assert_allclose(second, changed_point)
+    np.testing.assert_allclose(second_knn[:, 0], changed_point)
+    updated_nearest = bind_nearest(index.spec)
+    updated_knn = bind_knn(index.spec, 1, Euclidean(), return_points=True)
+    assert updated_nearest.kernel.module.get_module_hash() != nearest_hash
+    found, neighbors_jax = run_jax(updated_nearest, updated_knn)
+    np.testing.assert_allclose(found, changed_point)
+    np.testing.assert_allclose(neighbors_jax[:, 0], changed_point)

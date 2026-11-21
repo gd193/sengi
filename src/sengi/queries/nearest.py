@@ -1,12 +1,11 @@
 """Nearest queries with static primitive and metric callbacks."""
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import jax.numpy as jnp
 import warp as wp
 
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.warp.arrays import load_array
 from sengi.bvh.traversal.scheduling import make_walk
 from sengi.warp.contracts import make_struct
@@ -80,7 +79,7 @@ def bind(spec, metric=None, *, evaluate=None, lower_bound=None, predicate=None,
                          group_leaves=group_leaves, result_policy=result_policy)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_nearest(primitive, metric, *, predicate=None,
                   stack_capacity=STACK_CAPACITY, block_dim=64, cache_bounds=True,
                   packed_nodes=True, group_leaves=False, result_policy=None):
@@ -246,6 +245,8 @@ def _make_nearest(primitive, metric, *, predicate=None,
         components = (*components[:-1], ("output", "custom_struct"))
         return bind_query(SelectedNearestQuery, "nearest_result_kernel", primitive, inputs, outputs, body,
                           {"selected": selected}, block_dim, device=selected, ops=ops,
-                          result_policy=result_policy, components=components)
+                          result_policy=result_policy, components=components,
+                          native_providers=(ops, metric, predicate, result_policy, fused))
     return bind_query(NearestQuery, "nearest_kernel", primitive, inputs, outputs, body, {"nearest": nearest},
-                       block_dim, device=nearest, ops=ops, components=components)
+                       block_dim, device=nearest, ops=ops, components=components,
+                       native_providers=(ops, metric, predicate, fused))

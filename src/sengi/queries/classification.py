@@ -1,12 +1,11 @@
 """Even-odd classification with half-open +X ray intersections."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import warp as wp
 
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.jax.ffi import _flatten_vec_queries
 from sengi.warp.contracts import make_struct
 from sengi.warp.arrays import load_array
@@ -40,7 +39,7 @@ def bind(spec, policy=None, *, adapter=None, metadata_host_type=None, stack_capa
                           stack_capacity=stack_capacity, block_dim=block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_classify(primitive, policy=None, *, adapter=None, stack_capacity=STACK_CAPACITY, block_dim=128):
     if not 1 <= stack_capacity <= STACK_CAPACITY or not 1 <= block_dim <= 1024:
         raise ValueError("invalid stack capacity or block dimension")
@@ -100,4 +99,4 @@ def _make_classify(primitive, policy=None, *, adapter=None, stack_capacity=STACK
             "store_array(out_sign, i, sign)", "store_array(out_status, i, status)"]
     return bind_query(ClassifyQuery, "classify_kernel", primitive, inputs, outputs, body,
                       {"classify": classify}, block_dim, device=classify, groups=(("meta", Meta),), policy=policy,
-                      components=(("event", "policy"),))
+                      native_providers=(policy,), components=(("event", "policy"),))

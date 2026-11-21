@@ -1,6 +1,7 @@
 """Typed selected-result policy contract."""
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import WarpFunction, WarpType
 
 QueryT = TypeVar("QueryT")
@@ -12,6 +13,7 @@ ResultT = TypeVar("ResultT")
 class ResultPolicy(Generic[QueryT, ItemT, PointT, ResultT]):
     result_type: WarpType[ResultT]
     build: WarpFunction[[QueryT, ItemT, int, PointT, float], ResultT]
+    native: NativeHeaders | None = None
 
 @dataclass(frozen=True)
 class IdPoint:

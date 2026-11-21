@@ -10,6 +10,7 @@ from sengi.primitives.items import SegmentItem2, SegmentItem3
 from sengi.primitives.packing import _array_bounds, _array_data, _indexed_data, _segment_pack
 from sengi.primitives.spec import Primitive
 from sengi.queries.domain import Ray
+from sengi.warp.native import package_headers
 from sengi.warp.contracts import as_warp_function
 
 
@@ -61,4 +62,6 @@ def _segments(dimension: int) -> Primitive[Any, Any, Any, Any]:
         prepare_data=_array_data(Payload, dimension, 2, "segments", segment=True),
         prepare_indexed=_indexed_data(Payload, dimension, 2),
         boundary_adapter=boundary_adapter,
+        native=package_headers("primitives", "segment_distance.h",
+                               *(("segment_crossing.h",) if dimension == 2 else ())),
     )

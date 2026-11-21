@@ -3,6 +3,7 @@ from functools import lru_cache
 
 import warp as wp
 
+from sengi.warp.native import package_headers
 from sengi.primitives.data import SilhouetteEdgesArrays3, SilhouetteEdgesData3
 from sengi.primitives.device import item_functions
 from sengi.primitives.items import SilhouetteItem3
@@ -34,4 +35,5 @@ def SilhouetteEdges() -> Primitive[SilhouetteEdgesArrays3, SilhouetteEdgesData3,
         closest_euclidean=as_warp_function(closest), segment_endpoints=as_warp_function(endpoints),
         normal_sides=as_warp_function(normal_sides), name="silhouette_edges", payload_type=Payload,
         prepare_data=_array_data(Payload, 3, 4, "silhouette_edges"),
+        native=package_headers("primitives", "segment_distance.h"),
     )

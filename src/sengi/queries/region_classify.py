@@ -1,13 +1,12 @@
 """Closed-box classification from exact region and point queries."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import warp as wp
 
 from sengi.jax.ffi import _flatten_vec_queries
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 from sengi.queries.classification import bind as bind_classification
 from sengi.bvh.index import IndexSpec
@@ -42,7 +41,7 @@ def bind(spec, region_policy: RegionIntersectionPolicy, classify_policy,
                                  stack_capacity=stack_capacity, block_dim=block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_region_classify(primitive, region_policy, classify_policy, *,
                           stack_capacity, block_dim):
     spec = IndexSpec(primitive)
@@ -75,4 +74,5 @@ def _make_region_classify(primitive, region_policy, classify_policy, *,
     return bind_query(RegionClassifyQuery, "region_classify_kernel", primitive, inputs,
                       outputs, body, {"classify_region": classify_region}, block_dim,
                       device=classify_region, groups=(("meta", Meta),),
+                      native_providers=(region_policy, classify_policy),
                       components=(("intersection", "exact_policy"), ("classification", "policy")))

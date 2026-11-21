@@ -27,6 +27,8 @@ ReferenceT = TypeVar("ReferenceT")
 # Preserve the value's fields/signature for static checking while passing the
 # actual reference descriptor to Warp's compiler at runtime.
 if TYPE_CHECKING:
+    from sengi.warp.native import NativeHeaders
+
     WarpRef: TypeAlias = ReferenceT
 else:
     WarpRef = wp.ref
@@ -130,6 +132,7 @@ class FusedNearestOps(Generic[QueryT, DeviceDataT, ItemT, PointT]):
     candidate_at: WarpFunction[[QueryT, DeviceDataT, int, float], tuple[PointT, float]]
     candidate_item: WarpFunction[[QueryT, ItemT, float], tuple[PointT, float]]
     node_bound: WarpFunction[[QueryT, wp.vec3, wp.vec3], float]
+    native: "NativeHeaders | None" = None
 
 
 class PrimitiveSpec(Protocol[HostDataT, DeviceDataT, ItemT, PointT]):

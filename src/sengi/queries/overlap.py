@@ -1,10 +1,9 @@
 """Primitive-AABB overlap queries."""
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import warp as wp
 
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.primitives.geometry import boxes_overlap
 from sengi.jax.ffi import _flatten_vec_queries
 from sengi.warp.contracts import make_struct
@@ -26,7 +25,7 @@ class OverlapQuery(BoundQuery, Generic[HostDataT]):
         return hit.astype(bool), status
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def bind(spec, *, stack_capacity=STACK_CAPACITY, block_dim=256):
     primitive = spec.primitive
     if not 1 <= stack_capacity <= STACK_CAPACITY or not 1 <= block_dim <= 1024:

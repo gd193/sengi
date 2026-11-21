@@ -3,6 +3,7 @@ from typing import Generic, Literal, TypeVar, overload
 import jax
 from jax.typing import ArrayLike
 import warp as wp
+from sengi.warp.native import NativeHeaders
 from sengi.bvh.device_tree import DeviceTree
 from sengi.warp.contracts import PrimitiveSpec, WarpFunction, WarpRef, WarpType
 from sengi.warp.launch import BoundQuery
@@ -23,6 +24,7 @@ class RadiusAccumulator(Generic[QueryT, ItemT, PointT, StateT, ResultT]):
     initialize: WarpFunction[[QueryT, float], StateT]
     update: WarpFunction[[QueryT, ItemT, PointT, float, int, WarpRef[StateT]], None]
     finish: WarpFunction[[StateT], ResultT]
+    native: NativeHeaders | None = None
 
 class RadiusQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT, QueryT]):
     device: WarpFunction[[QueryT, float, DeviceTree, DeviceDataT], tuple[int, int]]

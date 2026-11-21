@@ -6,6 +6,7 @@ not interpreted as Python generics. This stub retains the host connections.
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, Protocol, TypeVar
 import warp as wp
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
 from sengi.boundary.data import BoundaryCore, SilhouetteMeta
 from sengi.queries.robin_radius import RobinOps
@@ -43,6 +44,7 @@ class NearestOps(Generic[QueryT, ItemT, PointT]):
     bind_fused: Callable[
         ["NearestOps[QueryT, ItemT, PointT]"], FusedNearestOps[QueryT, Any, ItemT, PointT] | None,
     ] | None = ...
+    native: NativeHeaders | None = None
 
 class NearestPolicy(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[QueryT, ItemT, PointT]: ...
@@ -56,6 +58,7 @@ class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
 class NearestCallbacks(Generic[ItemT, PointT]):
     evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]]
     lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float]
+    native: NativeHeaders | None = None
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[PointT, ItemT, PointT]: ...
 
 @dataclass(frozen=True)

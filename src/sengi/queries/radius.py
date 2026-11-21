@@ -1,13 +1,13 @@
 """Exact score-threshold queries with static metric and result policies."""
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 from sengi.warp.arrays import load_array
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.bvh.traversal.policy import make_traversal, make_traversal_state
 from sengi.queries.nearest import prepare_nearest
 from sengi.metrics.specialization import bind_nearest, nearest_functions, resolve_metric
@@ -35,6 +35,7 @@ class RadiusAccumulator(Generic[QueryT, ItemT, PointT, StateT, ResultT]):
     initialize: wp.Function
     update: wp.Function
     finish: wp.Function
+    native: NativeHeaders | None = None
 
     def __post_init__(self):
         for callback in (self.initialize, self.update, self.finish):
@@ -79,7 +80,7 @@ def bind(spec, metric=None, *, evaluate=None, lower_bound=None,
                         group_leaves)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_radius(primitive, metric, predicate, mode, accumulator, stack_capacity,
                  block_dim, cache_bounds, packed_nodes, group_leaves):
     if not 1 <= stack_capacity <= STACK_CAPACITY or not 1 <= block_dim <= 1024:
@@ -202,4 +203,5 @@ def _make_radius(primitive, metric, predicate, mode, accumulator, stack_capacity
             "store_array(out_value, i, value)", "store_array(out_status, i, status)"]
     return bind_query(RadiusQuery, "radius_kernel", primitive, inputs, outputs,
                       body, {"radius": radius}, block_dim, device=radius, ops=ops,
-                      mode=mode, components=components)
+                      mode=mode, components=components,
+                      native_providers=(ops, metric, predicate, accumulator))

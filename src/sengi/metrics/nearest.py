@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar
 
+from sengi.warp.native import NativeHeaders, package_headers
 from sengi.warp.contracts import FusedNearestOps, PrimitiveSpec, WarpFunction, WarpType
 
 import warp as wp
@@ -43,6 +44,8 @@ class NearestOps(Generic[QueryT, ItemT, PointT]):
         ["NearestOps[QueryT, ItemT, PointT]"], FusedNearestOps[QueryT, Any, ItemT, PointT] | None,
     ] | None = None
 
+    native: NativeHeaders | None = None
+
 
 class NearestPolicy(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[QueryT, ItemT, PointT]: ...
@@ -61,6 +64,12 @@ class NearestPredicate(Protocol[DeviceDataT, ItemT, PointT, QueryT]):
 
 
 
+_BOX_HEADERS = package_headers(
+    "metrics", "box_distance.h", dependencies=("metrics/native/rounding.h",),
+)
+_ANGULAR_HEADERS = package_headers("metrics", "angular.h")
+
+
 @wp.func_native("return bvh::conservative_box_score(query, lower, upper);")
 def _conservative_box_score(query: wp.vec3, lower: wp.vec3, upper: wp.vec3) -> float: ...
 
@@ -70,6 +79,7 @@ class NearestCallbacks(Generic[ItemT, PointT]):
     """Immutable nearest policy; scores and distance caps use callback units."""
     evaluate: WarpFunction[[PointT, ItemT], tuple[PointT, float]]
     lower_bound: WarpFunction[[PointT, wp.vec3, wp.vec3], float]
+    native: NativeHeaders | None = None
 
     @lru_cache(maxsize=None)
     def bind(self, primitive: PrimitiveSpec[HostDataT, DeviceDataT, ItemT, PointT]) -> NearestOps[PointT, ItemT, PointT]:
@@ -95,7 +105,7 @@ class NearestCallbacks(Generic[ItemT, PointT]):
 
         return NearestOps(Vec, (dimension,), valid, self.lower_bound, closest,
                           identity, identity, cull_limit,
-                          group_leaves=getattr(primitive, "point_bounds", False))
+                          group_leaves=getattr(primitive, "point_bounds", False), native=self.native)
 
 
 @dataclass(frozen=True)
@@ -178,7 +188,8 @@ class Euclidean:
                            cull_limit, viewpoint=viewpoint, group_leaves=group_leaves,
                            cache_nearest_bounds=getattr(primitive, "cache_nearest_bounds", True),
                            score_at=score_at, point_at=point_at,
-                           bind_fused=bind_fused if bind_primitive_fused is not None else None)
+                           bind_fused=bind_fused if bind_primitive_fused is not None else None,
+                           native=_BOX_HEADERS if node_bound is _conservative_box_score else None)
         return bound
 
 
@@ -226,7 +237,7 @@ class Angular:
                 return wp.vec3(query[0, 0], query[0, 1], query[0, 2])
 
         return NearestOps(Query, (2, dimension), valid, bound, closest,
-                          identity, identity, cull_limit, viewpoint=viewpoint)
+                          identity, identity, cull_limit, viewpoint=viewpoint, native=_ANGULAR_HEADERS)
 
 
 @dataclass(frozen=True)

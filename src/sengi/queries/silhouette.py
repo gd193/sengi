@@ -6,6 +6,8 @@ from typing import Generic, TypeVar
 import jax.numpy as jnp
 import warp as wp
 
+from sengi.warp.launch import cache_query
+
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
 from sengi.bvh.index import IndexData, IndexSpec
 
@@ -82,7 +84,7 @@ def bind(spec, metric=None, *, adapter=None, stack_capacity=STACK_CAPACITY, bloc
     return _make_silhouette(primitive, metric, adapter, stack_capacity, block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_silhouette(primitive, metric, adapter, stack_capacity, block_dim):
     from sengi.queries.nearest import bind as bind_nearest
 

@@ -6,12 +6,13 @@ from typing import Any, Generic, TypeVar
 import jax.numpy as jnp
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.data import _adapter_policy, _check_functions
 from sengi.boundary.sampling import SamplingMeta
 from sengi.bvh.device_tree import DeviceTree
 from sengi.queries.nearest import prepare_nearest
 from sengi.warp.arrays import load_array
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 
 H = TypeVar("H")
 D = TypeVar("D")
@@ -28,6 +29,7 @@ class RegionOps(Generic[Q, P]):
     valid: Any
     overlaps: Any
     contains: Any
+    native: NativeHeaders | None = None
 
 
 @lru_cache(maxsize=None)
@@ -75,7 +77,7 @@ def bind(spec, measure=None, region=None, *, block_dim=256):
     return _make_boundary_sample(primitive, measure, region, block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_boundary_sample(primitive, measure, region, block_dim):
     if not 1 <= block_dim <= 1024:
         raise ValueError("invalid block dimension")
@@ -156,5 +158,6 @@ def _make_boundary_sample(primitive, measure, region, block_dim):
             "store_array(out_point, i, p)", "store_array(out_normal, i, n)", "store_array(out_pdf, i, pdf)", "store_array(out_id, i, index)", "store_array(out_status, i, status)"]
     return bind_query(BoundarySampleQuery, "boundary_sample_kernel", primitive, inputs, outputs, body,
         {"sample": sample}, block_dim, device=sample, groups=(("meta", SamplingMeta),), region=region,
+        native_providers=(measure, region),
         components=(("selection", "subtree_weight"), ("region", type(region).__name__),
                     ("measure", type(measure).__name__)))

@@ -6,6 +6,7 @@ import jax
 import warp as wp
 from jax.typing import ArrayLike
 
+from sengi.warp.native import NativeHeaders
 from sengi.boundary.data import BoundaryCoreData, SilhouetteData, BoundaryCore, SilhouetteMeta
 from sengi.boundary.robin import CoefficientMeta, RobinData
 from sengi.bvh.device_tree import DeviceTree
@@ -43,6 +44,7 @@ class RobinOps(Generic[Q, D, ItemT, CD, FD]):
     to_distance: WarpFunction[[float], float] | None = ...
     leaf_bound_with_data: WarpFunction[[Q, D, CD, CoefficientMeta, int, int, float], float] | None = ...
     node_visit: WarpFunction[[Q, DeviceTree, D, CD, FD, CoefficientMeta, int, wp.vec3, wp.vec3, float], tuple[float, float, bool, bool]] | None = ...
+    native: NativeHeaders | None = None
 
 class RobinPolicy(Protocol[D, ItemT, P, Q, CD, FD]):
     def bind(self, primitive: PrimitiveSpec[H, D, ItemT, P], metric: NearestPolicy[D, ItemT, P, Q]) -> RobinOps[Q, D, ItemT, CD, FD]: ...

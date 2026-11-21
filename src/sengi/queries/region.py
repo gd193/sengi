@@ -1,14 +1,14 @@
 """Exact primitive versus closed-box queries with static intersection policies."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Generic, TypeVar
 
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import WarpFunction, make_struct
 from sengi.jax.ffi import _flatten_vec_queries
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 from sengi.primitives.geometry import boxes_overlap
 from sengi.primitives.region import (point2_intersects, point3_intersects,
                                  segment2_intersects, segment3_intersects,
@@ -25,6 +25,7 @@ PointT = TypeVar("PointT")
 class RegionIntersectionPolicy(Generic[DeviceDataT]):
     """Static callback intersects(geometry, packed_slot, box_lower, box_upper)."""
     intersects: WarpFunction[[DeviceDataT, int, wp.vec3, wp.vec3], bool]
+    native: NativeHeaders | None = None
 
     def __post_init__(self):
         if not isinstance(self.intersects, wp.Function):
@@ -77,7 +78,7 @@ def bind(spec, policy: RegionIntersectionPolicy, *, mode="any", count_limit=None
     return _make_region(primitive, policy, mode, count_limit, stack_capacity, block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_region(primitive, policy, mode, count_limit, stack_capacity, block_dim):
     if not 1 <= stack_capacity <= STACK_CAPACITY or not 1 <= block_dim <= 1024:
         raise ValueError("invalid stack capacity or block dimension")
@@ -130,4 +131,4 @@ def _make_region(primitive, policy, mode, count_limit, stack_capacity, block_dim
             "store_array(out_result, i, result)", "store_array(out_status, i, status)"]
     return bind_query(RegionQuery, "region_kernel", primitive, inputs, outputs, body,
                       {"region": region}, block_dim, device=region, mode=mode,
-                      components=(("intersection", "exact_policy"), ("result", mode)))
+                      native_providers=(policy,), components=(("intersection", "exact_policy"), ("result", mode)))

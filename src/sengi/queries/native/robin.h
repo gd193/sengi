@@ -1,7 +1,7 @@
 #pragma once
-#include "triangle_distance.h"
-#include "box_distance.h"
-#include "traversal.h"
+#include "../../primitives/native/triangle_distance.h"
+#include "../../metrics/native/box_distance.h"
+#include "../../bvh/traversal/native/traversal.h"
 
 namespace bvh {
 

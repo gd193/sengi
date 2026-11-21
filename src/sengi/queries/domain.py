@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
+from sengi.warp.native import NativeHeaders, package_headers
 from sengi.warp.contracts import WarpFunction, WarpType, warp_func, warp_struct
 
 import warp as wp
@@ -56,6 +57,8 @@ class RayOps(Generic[DeviceDataT, StateT]):
     state_type: WarpType[StateT] = cast(WarpType[StateT], wp.int32)
     next_hit: WarpFunction[[Ray, float, float, DeviceDataT, int, StateT, bool, bool], tuple[StateT, float, int]] | None = None
 
+    native: NativeHeaders | None = None
+
 
 @dataclass(frozen=True)
 class ClassificationOps(Generic[PointT, DeviceDataT, MetaT]):
@@ -63,6 +66,14 @@ class ClassificationOps(Generic[PointT, DeviceDataT, MetaT]):
     metadata_type: WarpType[MetaT]
     valid: WarpFunction[[MetaT], bool]
     event: WarpFunction[[PointT, DeviceDataT, int, int, MetaT], int]
+
+    native: NativeHeaders | None = None
+
+
+_CLASSIFICATION_HEADERS = package_headers(
+    "queries", "classification.h",
+    dependencies=("primitives/native/triangle_crossing.h", "primitives/native/determinant.h"),
+)
 
 
 def builtin_classification(primitive, metadata_type):
@@ -77,4 +88,4 @@ def builtin_classification(primitive, metadata_type):
     @wp.func_native("return bvh::classification_event(point, meta, slot);")
     def event(point: Vec, geometry: Geometry, slot: int, original: int, meta: Meta) -> int: ...
 
-    return ClassificationOps(Meta, valid, event)
+    return ClassificationOps(Meta, valid, event, native=_CLASSIFICATION_HEADERS)

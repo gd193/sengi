@@ -1,5 +1,5 @@
 #pragma once
-#include "triangle_crossing.h"
+#include "../../primitives/native/triangle_crossing.h"
 
 namespace bvh {
 

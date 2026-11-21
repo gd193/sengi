@@ -5,6 +5,7 @@ from typing import Any, Generic, Protocol, TypeVar
 
 import warp as wp
 
+from sengi.warp.native import NativeHeaders
 from sengi.warp.contracts import make_struct
 
 
@@ -33,6 +34,7 @@ class ResultPolicy(Generic[QueryT, ItemT, PointT, ResultT]):
 
     result_type: object
     build: object
+    native: NativeHeaders | None = None
 
     def __post_init__(self):
         if not isinstance(self.build, wp.Function):

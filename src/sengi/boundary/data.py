@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import warp as wp
 
+from sengi.warp.native import NativeHeaders, package_headers
 from sengi.warp.contracts import PrimitiveSpec, warp_struct
 from sengi.boundary.metadata import triangle_boundary_features, triangle_metadata
 from sengi.warp.arrays import load_array
@@ -207,6 +208,12 @@ def _features(core, tree, geometry):
 def cone_visibility(viewpoint: wp.vec3, tree: DeviceTree, meta: SilhouetteMeta, node: int) -> bool: ...
 
 
+_SILHOUETTE_HEADERS = package_headers(
+    "boundary", "silhouette.h",
+    dependencies=("primitives/native/segment_distance.h",),
+)
+
+
 @dataclass(frozen=True)
 class _FeaturePrimitive:
     dimension: int
@@ -217,6 +224,7 @@ class _FeaturePrimitive:
     closest_euclidean: object
     segment_endpoints: object
     normal_sides: object
+    native: NativeHeaders = _SILHOUETTE_HEADERS
 
 
 @lru_cache(maxsize=None)

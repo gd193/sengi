@@ -5,7 +5,7 @@ from functools import lru_cache
 
 import warp as wp
 
-from sengi.warp.native import _NATIVE_DEPENDENCIES, _NATIVE_DIRS, _PREAMBLE
+from sengi.warp.native import native_options, package_headers
 
 
 REGISTER_LIMIT = 64
@@ -73,19 +73,15 @@ def candidate_functions(k: int, track_slots: bool = False) -> CandidateFunctions
     return CandidateFunctions(storage, insert, add, limit, sort, score, item_id, count, slot)
 
 
-def configure_candidate_module(module, candidates: CandidateFunctions, k: int,
-                               track_slots: bool) -> None:
+_CANDIDATE_HEADERS = package_headers("queries", "knn_candidates.h")
+
+
+def candidate_build_options(candidates: CandidateFunctions, k: int, track_slots: bool):
     """Register the exact C++ representation used by the Warp struct."""
     small = "true" if k <= REGISTER_LIMIT else "false"
     tracked = "true" if track_slots else "false"
     name = candidates.storage.__name__
-    preamble = (_PREAMBLE + '\n#include "knn_candidates.h"\n'
-                + f"namespace bvh {{ using {name} = KnnCandidates<{k}, {small}, {tracked}>; }}\n"
-                + f"static_assert(sizeof(bvh::{name}) == {ctypes.sizeof(candidates.storage)});\n"
-                + f"static_assert(alignof(bvh::{name}) == {ctypes.alignment(candidates.storage)});\n")
-    options = wp.ModuleBuildOptions(
-        extra_cpu_include_dirs=_NATIVE_DIRS, extra_cuda_include_dirs=_NATIVE_DIRS,
-        extra_cpu_preamble=preamble, extra_cuda_preamble=preamble,
-        extra_build_dependencies=_NATIVE_DEPENDENCIES)
-    wp.set_module_options({"extra_build_options": options,
-                           "max_unroll": max(16, min(k, REGISTER_LIMIT))}, module=module)
+    preamble = (f"namespace bvh {{ using {name} = KnnCandidates<{k}, {small}, {tracked}>; }}\n"
+                f"static_assert(sizeof(bvh::{name}) == {ctypes.sizeof(candidates.storage)});\n"
+                f"static_assert(alignof(bvh::{name}) == {ctypes.alignment(candidates.storage)});\n")
+    return _CANDIDATE_HEADERS._build_options().merged(native_options(preamble=preamble))

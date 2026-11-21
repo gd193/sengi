@@ -6,6 +6,7 @@ from typing import Any, Generic, Protocol, TypeVar
 import jax.numpy as jnp
 import warp as wp
 
+from sengi.warp.native import NativeHeaders, package_headers
 from sengi.boundary.data import _check_functions
 from sengi.boundary.robin import CoefficientMeta
 from sengi.bvh.device_tree import DeviceTree, STACK_CAPACITY
@@ -14,7 +15,7 @@ from sengi.metrics.nearest import Euclidean
 from sengi.queries.nearest import prepare_nearest
 from sengi.warp.arrays import load_array
 from sengi.warp.contracts import make_struct
-from sengi.warp.launch import BoundQuery, bind_query
+from sengi.warp.launch import BoundQuery, bind_query, cache_query
 
 
 H = TypeVar("H")
@@ -46,6 +47,7 @@ class RobinOps(Generic[Q, D, ItemT, CD, FD]):
     to_distance: Any = None
     leaf_bound_with_data: Any = None
     node_visit: Any = None
+    native: NativeHeaders | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,19 @@ class RobinMetric(Protocol[D, ItemT, PointContra, Q, CD, FD]):
     """Optional static metric capability for conservative Robin policies."""
 
     def bind_robin(self, primitive): ...
+
+
+_ROBIN_HEADERS = package_headers(
+    "queries", "robin.h", "silhouette.h",
+    include_owners=("boundary",),
+    dependencies=("primitives/native/triangle_distance.h", "primitives/native/determinant.h",
+                  "metrics/native/box_distance.h", "metrics/native/rounding.h",
+                  "primitives/native/segment_distance.h"),
+)
+_ROBIN_2D_HEADERS = package_headers(
+    "boundary", "silhouette.h",
+    dependencies=("primitives/native/segment_distance.h",),
+)
 
 
 @lru_cache(maxsize=None)
@@ -170,7 +185,8 @@ def _euclidean_robin(primitive):
 
     return RobinOps(Vec, (dimension,), valid, node_bound, primitive_bound, feature_bound, bound_with_data,
                     to_score=nearest.to_score, to_distance=nearest.to_distance,
-                    leaf_bound_with_data=leaf_with_data, node_visit=visit)
+                    leaf_bound_with_data=leaf_with_data, node_visit=visit,
+                    native=_ROBIN_HEADERS if dimension == 3 else _ROBIN_2D_HEADERS)
 
 
 @dataclass(frozen=True)
@@ -202,7 +218,7 @@ def bind(spec, policy=None, metric=None, *, core_host_type=None,
     return _make_robin_radius(primitive, ops, stack_capacity, block_dim)
 
 
-@lru_cache(maxsize=None)
+@cache_query
 def _make_robin_radius(primitive, ops, stack_capacity, block_dim):
     from sengi.boundary.data import BoundaryCore, SilhouetteMeta
 
@@ -347,7 +363,7 @@ def _make_robin_radius(primitive, ops, stack_capacity, block_dim):
     body = ["value, status = wp.static(radius)(load_array(queries, i), load_array(caps, i), tree, geometry, core, feature, meta)",
             "store_array(out_radius, i, value)", "store_array(out_status, i, status)"]
     return bind_query(RobinQuery, "robin_radius_kernel", primitive, inputs, outputs, body, {"radius": radius},
-        block_dim, device=radius, ops=ops, handlers=handlers,
+        block_dim, device=radius, ops=ops, handlers=handlers, native_providers=(ops,),
         groups=(("core", Core), ("feature", Feature), ("meta", CoefficientMeta)),
         components=(("node", "visit" if ops.node_visit is not None else
                      "coarse_and_data" if ops.node_bound is not None and ops.node_bound_with_data is not None else
