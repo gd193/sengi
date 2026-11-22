@@ -9,7 +9,7 @@ from sengi.primitives.points import Points  # noqa: E402
 from sengi.bvh import Config  # noqa: E402
 
 
-def test_lbvh_duplicate_morton_codes_leaf_sizes_and_depth():
+def test_lbvh_duplicate_morton_codes_and_leaf_sizes():
     primitive = Points(2)
     # Repeated codes span more than one leaf and share the tree with other codes.
     vertices = np.repeat([[1., 2.], [-3., 2.], [10., 2.]], [11, 5, 7], axis=0)
@@ -19,8 +19,6 @@ def test_lbvh_duplicate_morton_codes_leaf_sizes_and_depth():
     assert int(tree.node_leaf_count.max()) == 2
     np.testing.assert_array_equal(tree.node_lower[0], [-3., 2., 0.])
     np.testing.assert_array_equal(tree.node_upper[0], [10., 2., 0.])
-    with pytest.raises(ValueError, match="stack depth"):
-        bvh.build(primitive, source, config=Config(max_stack_depth=1, leaf_size_threshold=2), builder="lbvh").data
 
 
 def test_lbvh_retains_float32_morton_quantization_with_overflow_fallback():

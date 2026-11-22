@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from operator import index
 from typing import Any
 
 import jax
@@ -14,12 +13,12 @@ import warp as wp
 from sengi.bvh.config import Config
 from sengi.bvh.index import IndexSpec
 from sengi.bvh import lbvh, sah
-from sengi.bvh.tree import _int32_array, _pack_ray_nodes, _validate_tree
+from sengi.bvh.tree import MAX_TREE_DEPTH, _int32_array, _pack_ray_nodes, _validate_tree
 from sengi.bvh.bounds import _validated_bounds
 from sengi.warp.contracts import warp_struct
 
 
-STACK_CAPACITY = 64
+STACK_CAPACITY = MAX_TREE_DEPTH
 
 
 @warp_struct
@@ -76,12 +75,6 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
     config = Config() if config is None else config
     if primitive.dimension not in (2, 3):
         raise ValueError("BVH bounds support 2D or 3D primitives")
-    try:
-        max_depth = index(config.max_stack_depth)
-    except TypeError as exc:
-        raise ValueError("stack depth must be an integer") from exc
-    if not 1 <= max_depth <= STACK_CAPACITY:
-        raise ValueError("invalid stack depth")
     lo, hi = _validated_bounds(*primitive.bounds(data), dimension=primitive.dimension)
     if not len(lo):
         empty = jnp.empty((0,), jnp.int32)
@@ -96,9 +89,7 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
     if primitive.dimension == 2:
         lo, hi = (np.pad(v, ((0, 0), (0, 1))) for v in (lo, hi))
     built = build(lo, hi, min(config.leaf_size_threshold, len(lo)))
-    arrays, depths, _ = _validate_tree(built, len(lo))
-    if depths.max() > max_depth:
-        raise ValueError("tree exceeds configured stack depth")
+    arrays, _ = _validate_tree(built, len(lo))
 
     ids = _int32_array("prim_ids", built.prim_ids)
     if (ids.shape != (len(lo),) or np.any(ids < 0) or np.any(ids >= len(lo))

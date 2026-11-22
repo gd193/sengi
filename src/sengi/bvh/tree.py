@@ -23,6 +23,18 @@ import jax.numpy as jnp
 import numpy as np
 
 
+# Depth counts edges from the root. Binary traversal can defer one sibling per edge.
+MAX_TREE_DEPTH = 64
+
+
+def _check_depth(depth: int, builder: str) -> None:
+    if depth > MAX_TREE_DEPTH:
+        raise ValueError(
+            f"{builder.upper()} reached depth {depth}; binary BVHs support at most "
+            f"{MAX_TREE_DEPTH}. Try a larger leaf_size_threshold or a different builder."
+        )
+
+
 class BVHPayload(NamedTuple):
     node_lower: jnp.ndarray
     node_upper: jnp.ndarray
@@ -48,7 +60,7 @@ def _int32_array(name, value):
 
 
 def _validate_tree(tree, n_refs):
-    """Return index arrays, depths and postorder; root must be 0."""
+    """Return index arrays and postorder; root must be 0."""
     arrays = {
         name: _int32_array(name, getattr(tree, name))
         for name in ("node_left", "node_right", "node_leaf_offset", "node_leaf_count")
@@ -94,11 +106,10 @@ def _validate_tree(tree, n_refs):
 
     # Validate topology before accumulating areas.
     state = np.zeros((n_nodes,), dtype=np.uint8)
-    depths = np.zeros((n_nodes,), dtype=np.int32)
     postorder = []
-    stack = [(0, False, 0)]
+    stack = [(0, False)]
     while stack:
-        node, exiting, depth = stack.pop()
+        node, exiting = stack.pop()
         if exiting:
             state[node] = 2
             postorder.append(node)
@@ -106,14 +117,13 @@ def _validate_tree(tree, n_refs):
         if state[node] != 0:
             raise ValueError("tree topology contains a cycle or shared child")
         state[node] = 1
-        depths[node] = depth
-        stack.append((node, True, depth))
+        stack.append((node, True))
         if count[node] == 0:
-            stack.append((int(right[node]), False, depth + 1))
-            stack.append((int(left[node]), False, depth + 1))
+            stack.append((int(right[node]), False))
+            stack.append((int(left[node]), False))
     if np.any(state != 2):
         raise ValueError("tree contains nodes unreachable from root 0")
-    return arrays, depths, postorder
+    return arrays, postorder
 
 
 def _pack_ray_nodes(node_lower, node_upper, left, right, offset, count):

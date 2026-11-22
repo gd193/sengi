@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from jax.typing import ArrayLike
 
 from sengi.bvh.config import Config
-from sengi.bvh.tree import BVHPayload
+from sengi.bvh.tree import BVHPayload, _check_depth
 from sengi.bvh.bounds import _validated_bounds
 
 
@@ -201,31 +201,32 @@ def _refit_aabbs_np(node_left: np.ndarray, node_right: np.ndarray,
     if num_internal == 0:
         return node_lo, node_hi
 
-    # Compute depth via parent-pointer iteration. We have child arrays;
-    # build parent by scatter then walk leaves up to the root, settling
-    # internal nodes in topological order.
+    # Refit a parent once both children have settled.
     parent = np.full((total,), -1, dtype=np.int32)
     parent[node_left[:num_internal]] = np.arange(num_internal, dtype=np.int32)
     parent[node_right[:num_internal]] = np.arange(num_internal, dtype=np.int32)
 
-    # ready[i] = number of children settled. Internal node settles when both
-    # children are settled. Process via BFS up from leaves.
     ready = np.zeros((num_internal,), dtype=np.int32)
-    queue = list(range(num_internal, total))  # leaves
-    head = 0
-    while head < len(queue):
-        node = queue[head]
-        head += 1
-        p = parent[node]
-        if p < 0:
-            continue
-        ready[p] += 1
-        if ready[p] == 2:
-            l = int(node_left[p])
-            r = int(node_right[p])
-            node_lo[p] = np.minimum(node_lo[l], node_lo[r])
-            node_hi[p] = np.maximum(node_hi[l], node_hi[r])
-            queue.append(p)
+    # A parent becomes ready one round after its taller child. The root's
+    # round is therefore the maximum leaf depth, even for unbalanced trees.
+    level = range(num_internal, total)
+    height = 0
+    while level:
+        _check_depth(height, "lbvh")
+        parents = []
+        for node in level:
+            p = parent[node]
+            if p < 0:
+                continue
+            ready[p] += 1
+            if ready[p] == 2:
+                l = int(node_left[p])
+                r = int(node_right[p])
+                node_lo[p] = np.minimum(node_lo[l], node_lo[r])
+                node_hi[p] = np.maximum(node_hi[l], node_hi[r])
+                parents.append(p)
+        level = parents
+        height += 1
 
     return node_lo, node_hi
 

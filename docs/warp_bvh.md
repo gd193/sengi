@@ -27,7 +27,10 @@ point, distance, original_id, status = nearest(lbvh.data, points)
 
 Use `bvh.Config(leaf_size_threshold=...)` to configure leaves. Select
 `builder="lbvh"` to partition in Morton order. Both builders pack geometry
-into leaf order for traversal. Query result IDs refer to the original input.
+into leaf order for traversal. Both support depths up to 64 edges from the root.
+If a split would require a deeper tree, construction raises `ValueError`.
+A larger leaf threshold or a different builder can produce a shallower tree.
+Query result IDs refer to the original input.
 Batch points as `(..., D)`, where `D` is the primitive dimension. Caps are
 scalar or match the query batch. Dynamic inputs, including the index arrays,
 can cross JIT and vmap boundaries.

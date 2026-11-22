@@ -12,7 +12,7 @@ import jax.numpy as jnp
 from jax.typing import ArrayLike
 
 from sengi.bvh.config import Config
-from sengi.bvh.tree import BVHPayload
+from sengi.bvh.tree import BVHPayload, _check_depth
 from sengi.bvh.bounds import _validated_bounds
 
 
@@ -20,7 +20,6 @@ _NDIM = 3
 
 # FCPW defaults (bvh.h Bvh<DIM>::buildLBvhCpu / SAH constants).
 _N_BUCKETS = 8
-_FCPW_BVH_MAX_DEPTH = 64
 _TRAV_COST = np.float32(1.0)
 _ISECT_COST = np.float32(1.0)
 
@@ -201,8 +200,7 @@ def _build_recursive(state: _BuildState, node_id: int,
     state.node_lower[node_id] = node_lo
     state.node_upper[node_id] = node_hi
 
-    # Note step build:5 — leaf if at-or-below threshold, or near max depth.
-    if n_refs <= leaf_size or depth >= _FCPW_BVH_MAX_DEPTH - 2:
+    if n_refs <= leaf_size:
         offset = len(prim_perm_out)
         prim_perm_out.extend(int(p) for p in prim_idx)
         state.node_leaf_offset[node_id] = offset
@@ -242,6 +240,8 @@ def _build_recursive(state: _BuildState, node_id: int,
         state.node_left[node_id] = -1
         state.node_right[node_id] = -1
         return
+
+    _check_depth(depth + 1, "sah")
 
     # Note step build:9 — partition primitives by centroid side.
     left_idx, right_idx = _partition_centroid(prim_idx, ref_cent, axis, coord)

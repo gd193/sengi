@@ -4,6 +4,62 @@ from pathlib import Path
 import subprocess
 import sys
 
+import numpy as np
+import pytest
+
+from sengi import bvh
+
+
+def test_leaf_size_is_positive_and_keyword_only():
+    with pytest.raises(TypeError):
+        bvh.Config(8)
+    with pytest.raises(ValueError, match="leaf size"):
+        bvh.Config(leaf_size_threshold=0)
+
+
+@pytest.mark.parametrize("builder", ["sah", "lbvh"])
+@pytest.mark.parametrize("indexed", [False, True], ids=["bounds", "index"])
+def test_binary_depth_limit(builder, indexed):
+    config = bvh.Config(leaf_size_threshold=1)
+    if builder == "sah":
+        # Increasing radii on alternating axes make each SAH split peel one point.
+        radii = np.exp2(4 * (np.arange(22) - 12))
+        deep = (radii[:, None, None] * np.eye(3)).reshape(-1, 3)
+    else:
+        # One branch per Morton bit, then duplicate origins split by index.
+        bits = (np.exp2(np.arange(21))[:, None, None] * np.eye(3)).reshape(-1, 3)
+        deep = np.vstack((bits, [[2**21 - 1] * 3], np.zeros((3, 3))))
+    deep = deep.astype(np.float32)
+    shallow = deep[:-1]  # Exactly 64 edges. The final point requires a 65th.
+
+    error = rf"{builder.upper()} reached depth 65.*at most 64"
+    if indexed:
+        pytest.importorskip("warp")
+        from sengi.primitives.points import Points
+        from sengi.queries.nearest import bind
+
+        primitive = Points(3)
+        index = bvh.build(primitive, primitive.data(shallow), builder=builder, config=config)
+        # The innermost point defers one sibling at every edge of the deep branch.
+        point = shallow[2] if builder == "sah" else shallow[-1]
+        _, distance, _, status = bind(index.spec)(index.data, point)
+        assert int(status) == 1 and float(distance) == 0
+        *_, status = bind(index.spec, stack_capacity=63)(index.data, point)
+        assert int(status) == -1
+        with pytest.raises(ValueError, match=error):
+            bvh.build(primitive, primitive.data(deep), builder=builder, config=config)
+    else:
+        build = bvh.build_sah if builder == "sah" else bvh.build_lbvh
+        payload = build(shallow, shallow, config)
+        assert np.count_nonzero(payload.node_leaf_count) == len(shallow)
+        with pytest.raises(ValueError, match=error):
+            build(deep, deep, config)
+        if builder == "sah":
+            # Coincident points make the deepest split unprofitable at depth 64.
+            deep[1] = deep[2]
+            payload = build(deep, deep, config)
+            assert int(payload.node_leaf_count.max()) == 2
+
 
 def test_builders_work_when_warp_is_unavailable():
     # Isolate imports and simulate a missing Warp installation.

@@ -859,33 +859,6 @@ def test_warp_bvh_status_distinguishes_invalid_from_empty(builder):
     assert int(bad_interval[3]) == -1 and not bool(bad_interval[2])
 
 
-@pytest.mark.parametrize("builder", BUILDERS, ids=BUILDERS)
-def test_warp_bvh_build_config_depth_and_leaf_bounds(builder):
-    prims, _, _ = _sphere(2)
-    with pytest.raises(ValueError):
-        bvh.build(TRIANGLES, prims, builder=builder, config=Config(max_stack_depth=0))
-    with pytest.raises(ValueError):
-        bvh.build(TRIANGLES, prims, builder=builder, config=Config(max_stack_depth=65))
-    with pytest.raises(ValueError):
-        bvh.build(
-            TRIANGLES, prims, builder=builder, config=Config(leaf_size_threshold=0)
-        )
-    with pytest.raises(ValueError, match="depth"):
-        bvh.build(
-            TRIANGLES,
-            prims,
-            builder=builder,
-            config=Config(max_stack_depth=1, leaf_size_threshold=1),
-        )
-    built = bvh.build(
-        TRIANGLES,
-        prims,
-        builder=builder,
-        config=Config(max_stack_depth=64, leaf_size_threshold=1),
-    )
-    assert built.data is not None
-
-
 def _triangle_regressions():
     regular = [[0, 0, 0], [2, 0, 0], [0, 1, 0]]
     thin = np.array([[0, 0, 0], [1e4, 0, 0], [1e4, 1e-3, 0]], np.float32)
