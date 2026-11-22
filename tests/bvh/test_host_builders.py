@@ -10,6 +10,34 @@ import pytest
 from sengi import bvh
 
 
+def test_integer_bounds_enclose_input_after_float32_conversion():
+    source = np.array([[2**53 + 1, -(2**53 + 1), 2**53]], dtype=np.int64)
+    payload = bvh.build_sah(source, source)
+    # Compare as integers so the test itself cannot round away the discrepancy.
+    lower = np.asarray(payload.node_lower).astype(np.int64)
+    upper = np.asarray(payload.node_upper).astype(np.int64)
+    assert np.all(lower <= source) and np.all(source <= upper)
+    assert lower[0, 2] == upper[0, 2] == source[0, 2]
+
+
+@pytest.mark.parametrize("dtype", [np.int64, np.uint64])
+def test_integer_bounds_at_dtype_max(dtype):
+    maximum = int(np.iinfo(dtype).max)
+    source = np.full((1, 3), maximum, dtype=dtype)
+    payload = bvh.build_sah(source, source)
+    assert int(payload.node_upper[0, 0]) == maximum + 1
+    assert int(payload.node_lower[0, 0]) < maximum
+    with pytest.raises(ValueError, match="ordered"):
+        bvh.build_sah(source.astype(np.float64), source)
+
+
+@pytest.mark.parametrize("value", [2**89 + 1, "1"])
+def test_bounds_reject_implicit_numeric_coercion(value):
+    source = [[value, 0, 0]]
+    with pytest.raises(ValueError, match="real numeric dtype"):
+        bvh.build_sah(source, source)
+
+
 def test_leaf_size_is_positive_and_keyword_only():
     with pytest.raises(TypeError):
         bvh.Config(8)

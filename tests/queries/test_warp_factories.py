@@ -176,6 +176,30 @@ def test_warp_factory_silhouette_eligibility(metric, queries):
     assert float(distance) == (2 if isinstance(metric, Euclidean) else 0)
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_segment_nearest_preserves_endpoint_and_nearby_interior(reverse):
+    primitive = Segments(3)
+    endpoints = [[[-2**25, 0, 0]], [[1, 0, 0]]]
+    if reverse:
+        endpoints.reverse()
+    index = bvh.build(primitive, primitive.data(*endpoints))
+    x = jnp.array([[1., 0, 0], [.5, 0, 0]], jnp.float32)
+    point, distance, _, status = bind_nearest(index.spec)(index.data, x, 0.)
+    np.testing.assert_array_equal(status, 1)
+    np.testing.assert_array_equal(distance, 0.)
+    np.testing.assert_array_equal(point, x)
+
+
+def test_segment_nearest_far_perpendicular_query():
+    primitive = Segments(3)
+    a, b = [[-65., 64., 0.]], [[-64., 65., 0.]]
+    for start, end in ((a, b), (b, a)):
+        index = bvh.build(primitive, primitive.data(start, end))
+        point, _, _, status = bind_nearest(index.spec)(index.data, jnp.array([2**30, -2**30, 0.], jnp.float32))
+        assert int(status) == 1
+        np.testing.assert_array_equal(point, [-64.5, 64.5, 0.])
+
+
 def _square_segments():
     primitive = Segments(2)
     a = jnp.array([[-1., -1], [1., -1], [1., 1], [-1., 1]])

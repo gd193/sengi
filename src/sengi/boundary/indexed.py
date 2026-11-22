@@ -206,19 +206,19 @@ def robin_bounds(primitive):
     def node_bound(query: Vec, lower: wp.vec3, upper: wp.vec3, coefficients: wp.vec2):
         return wp.static(nearest.node_bound)(query, lower, upper)
 
+    @wp.func_native("return bvh::closest_segment(query, a, b);")
+    def project(query: wp.vec3, a: wp.vec3, b: wp.vec3) -> wp.vec3: ...
+
     @wp.func
     def feature_bound(query: Vec, a: wp.vec3, b: wp.vec3, n0: wp.vec3, n1: wp.vec3):
         point = wp.vec3(0.0)
         for j in range(wp.static(dimension)):
             point[j] = query[j]
-        view, edge = point-a, b-a
+        view = point-a
         side0, side1 = wp.dot(view, n0), wp.dot(view, n1)
         if (side0 < 0.0 and side1 < 0.0) or (side0 > 0.0 and side1 > 0.0):
             return wp.inf
-        t, denominator = float(0.0), wp.dot(edge, edge)
-        if denominator > 0.0:
-            t = wp.clamp(wp.dot(view, edge)/denominator, 0.0, 1.0)
-        delta = point-a-t*edge
+        delta = point - project(point, a, b)
         return wp.dot(delta, delta)
 
     return nearest, valid, node_bound, feature_bound
