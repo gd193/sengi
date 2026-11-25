@@ -1,0 +1,33 @@
+provenance = "Trimesh 4.12.1 analytical icosphere"
+closed = true
+oriented = true
+
+[variants."small"]
+faces = 320
+file = "small.ply"
+sha256 = "17c0eaeee63a1a9cb504ed5b48044b0fc77054441fedd6560b905783f7e3a16e"
+
+[variants."medium"]
+faces = 5120
+file = "medium.ply"
+sha256 = "260ba384199ee3c9c104216b7aaa77cce052e8fa08399dd4927727006d5bbdd3"
+
+[variants."large"]
+faces = 20480
+file = "large.ply"
+sha256 = "2d34fb33868697f2843647b43696b42ae2c41072f5fa1da7342d6d1fd19c1433"
+
+[variants."82k"]
+faces = 81920
+recipe = { kind = "icosphere", subdivisions = 6 }
+geometry_sha256 = "4daab23c474b280df7ccb0b99596bf4751119a1f164242737b143e06bfec960f"
+
+[variants."328k"]
+faces = 327680
+recipe = { kind = "icosphere", subdivisions = 7 }
+geometry_sha256 = "8038c27a8d31049c760429e763413efb39c68da505122f895df2425c6d3706f5"
+
+[variants."1.3m"]
+faces = 1310720
+recipe = { kind = "icosphere", subdivisions = 8 }
+geometry_sha256 = "fbde3980f08b2ae76f1f4019c395c789b20365ad315951b34cdde36ca3ec1d39"

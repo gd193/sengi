@@ -1,71 +1,77 @@
-"""Benchmark reporting must preserve failures before timing returns any samples."""
+"""Benchmark runs persist point-KNN failures and validated answers."""
 
-import json
-import sys
+import csv
 
 import numpy as np
 import pytest
 
-from benchmarks import warp_knn_reference as benchmark
+from benchmarks.adapters import sengi
+from benchmarks.cli import main
+from benchmarks.queries import validation
 
 
 @pytest.mark.parametrize("failure_stage", ["prepare", "execute", "validate", None])
-def test_warp_case_report_replaces_stale_results(tmp_path, monkeypatch, failure_stage):
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    (binaries / "build.json").write_text(json.dumps({"cuda_root": str(tmp_path)}))
-    output = tmp_path / "results"
-    output.mkdir()
-    report_path = output / "results.json"
-    report_path.write_text(json.dumps({"results": [{"validation": "stale"}]}))
-    monkeypatch.setattr(sys, "argv", [
-        "benchmark", "--binaries", str(binaries), "--output", str(output),
-        "--dimensions", "2", "--sizes", "1", "--queries", "1", "--k", "1",
-        "--fixtures", "uniform", "--implementations", "ours",
-        "--no-cache-bounds", "--node-access", "indexed", "--scheduling", "grouped",
-    ])
-    monkeypatch.setattr(benchmark.subprocess, "check_output", lambda *a, **kw: "mock metadata")
-    monkeypatch.setattr(benchmark, "fixtures", lambda *a: (
-        np.zeros((1, 2), np.float32), np.zeros((1, 2), np.float32),
-    ))
-    monkeypatch.setattr(benchmark, "prepare_ours", lambda *a: object())
+def test_point_knn_run_persists_failures(tmp_path, monkeypatch, failure_stage):
+    monkeypatch.setattr("benchmarks.runner.hardware", lambda device: {"gpu": "fixture"})
+    output = tmp_path / "run"
 
-    def fake_ours(*args, **kwargs):
-        assert kwargs["cache_bounds"] is False
-        assert kwargs["packed_nodes"] is False
-        assert kwargs["group_leaves"] is True
-        return (
-            (np.zeros((1, 1), np.float32), np.zeros((1, 1), np.int32),
-             np.ones(1, np.int32), np.ones(1, np.int32)),
-            [0.1], {"gpu": "mock"},
-        )
+    def execute(geometry, jobs, options):
+        if failure_stage == "prepare":
+            raise RuntimeError("deliberate prepare failure")
+        for job in jobs:
+            if failure_stage == "execute":
+                raise RuntimeError("deliberate execute failure")
+            result = {
+                "distance": np.zeros((1, 1), np.float32),
+                "id": np.zeros((1, 1), np.int32),
+                "count": np.ones(1, np.int32),
+                "status": np.ones(1, np.int32),
+            }
+            yield job, result, [0.1], {"device": options.device}
 
-    monkeypatch.setattr(benchmark, "ours", fake_ours)
+    monkeypatch.setattr(sengi, "execute", execute)
 
-    error = AssertionError("deliberate invalid result")
+    if failure_stage == "validate":
 
-    def fail(*args, **kwargs):
-        raise error
+        def fail_validation(*args):
+            raise RuntimeError("deliberate validate failure")
 
-    if failure_stage is not None:
-        target = {"prepare": "prepare_ours", "execute": "ours", "validate": "validate"}
-        monkeypatch.setattr(benchmark, target[failure_stage], fail)
-        with pytest.raises(AssertionError) as caught:
-            benchmark.main()
-        assert caught.value is error
+        monkeypatch.setattr(validation, "validate", fail_validation)
+
+    status = main(
+        [
+            "run",
+            "--adapter",
+            "sengi",
+            "--mesh",
+            "points2",
+            "--size",
+            "1",
+            "--query",
+            "knn",
+            "--workload",
+            "uniform",
+            "--count",
+            "1",
+            "--param",
+            "k=1",
+            "--repeats",
+            "1",
+            "--output",
+            str(output),
+        ]
+    )
+
+    with (output / "summary.csv").open() as report:
+        (row,) = csv.DictReader(report)
+    assert row["query"] == "knn"
+    assert row["geometry"] == "points2"
+    if failure_stage is None:
+        assert status == 0
+        assert row["status"] == "unchecked"
+        assert float(row["median_ms"]) == 0.1
     else:
-        benchmark.main()
-
-    rows = json.loads(report_path.read_text())["results"]
-    assert len(rows) == 1
-    row = rows[0]
-    assert (row["implementation"], row["dimension"], row["fixture"], row["k"],
-            row["n"], row["q"]) == ("ours", 2, "uniform", 1, 1, 1)
-    assert set(row["fixture_sha256"]) == {"data.f32", "queries.f32"}
-    if failure_stage is not None:
-        assert row["validation"] == "FAILED"
-        assert row["error"] == "AssertionError: deliberate invalid result"
-    else:
-        assert row["validation"] == "passed"
-        assert row["samples_ms"] == [0.1]
-        assert set(row["output_sha256"]) == {"scores", "ids", "count", "status"}
+        assert status == 1
+        assert row["status"] == "failed"
+        (result,) = (output / "results").glob("*.json")
+        assert f"deliberate {failure_stage} failure" in result.read_text()

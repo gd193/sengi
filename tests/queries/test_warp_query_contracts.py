@@ -8,12 +8,9 @@ import pytest
 
 from sengi import bvh
 from sengi.queries.domain import ClassificationOps, RayOps
-from sengi.boundary.sampling import MeasureOps
-from sengi.boundary.data import BoundaryData
-from sengi.boundary.sampling import SamplingData
 from sengi.queries.boundary_sample import RegionOps
 from sengi.boundary.data import BoundaryData
-from sengi.boundary.sampling import SamplingData
+from sengi.boundary.sampling import MeasureOps, SamplingData
 from sengi.queries.boundary_sample import bind as bind_boundary_sample
 from sengi.queries.classification import bind as bind_classification
 from sengi.queries.rays import bind as bind_rays

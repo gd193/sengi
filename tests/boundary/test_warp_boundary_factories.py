@@ -8,7 +8,8 @@ import pytest
 
 wp = pytest.importorskip("warp")
 
-from benchmarks._warp_cases import scene  # noqa: E402
+from benchmarks.adapters.sengi import prepare, prepare_boundary  # noqa: E402
+from benchmarks.workloads import builtin_geometry  # noqa: E402
 
 from sengi.boundary.data import SilhouetteMeta, resolve_boundary_adapter
 from sengi.primitives.segments import Segments
@@ -30,7 +31,8 @@ def _invisible_feature(query: wp.vec2, item: Any):
 
 @pytest.mark.parametrize("reject", ["node", "feature"])
 def test_boundary_custom_visibility_and_optional_metadata(reject):
-    index, boundary, _ = scene("segments2")
+    index, raw = prepare(builtin_geometry("segments2", 16))
+    boundary = prepare_boundary(index, raw, {"closest_silhouette"})
     options = {"visibility": _invisible} if reject == "node" else {"visibility": None, "predicate": _invisible_feature}
     adapter = replace(resolve_boundary_adapter(index.spec.primitive), **options)
     result = bind_silhouette(index.spec, adapter=adapter)(boundary, np.array([3, 0], np.float32))

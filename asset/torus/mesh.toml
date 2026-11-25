@@ -1,0 +1,33 @@
+provenance = "Trimesh 4.12.1 analytical torus"
+closed = true
+oriented = true
+
+[variants."small"]
+faces = 320
+file = "small.ply"
+sha256 = "d15193dd3a2c0b7a1793f2605f498f92a3a617eaf354ecc6d5b4c8dfffa4d4e2"
+
+[variants."medium"]
+faces = 5120
+file = "medium.ply"
+sha256 = "bebc690322b5c68df4a25c5559cbb2a903c5284d68490cf69636cc6a6ad86a02"
+
+[variants."large"]
+faces = 20480
+file = "large.ply"
+sha256 = "f5169705e16578a66a2090d4d7f9ede9454389553ee3861e840146feaac59417"
+
+[variants."82k"]
+faces = 81920
+recipe = { kind = "torus", major_radius = 0.7, minor_radius = 0.3, major_sections = 320, minor_sections = 128 }
+geometry_sha256 = "a578651ea0574c8a6e9cb356d3a5538b0865caee647ba82d9c21b00a34eadf3c"
+
+[variants."328k"]
+faces = 327680
+recipe = { kind = "torus", major_radius = 0.7, minor_radius = 0.3, major_sections = 640, minor_sections = 256 }
+geometry_sha256 = "4461b1625b28ec3a5a22f8b78253b3bb3e94f6115b573eacbc016c5f5df4e460"
+
+[variants."1.3m"]
+faces = 1310720
+recipe = { kind = "torus", major_radius = 0.7, minor_radius = 0.3, major_sections = 1280, minor_sections = 512 }
+geometry_sha256 = "734a8406d80df75d58339e0818764c5fe148f102d3f5a96a89471ff8ce438ba7"

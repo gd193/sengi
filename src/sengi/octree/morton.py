@@ -6,8 +6,6 @@ a query backend.
 """
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 import jax.numpy as jnp
 from jax.typing import ArrayLike
@@ -17,10 +15,7 @@ from sengi.octree.tree import OctreePayload
 from sengi.bvh.bounds import _validated_bounds
 
 
-_NDIM = 3
 _OCTREE_FANOUT = 8
-# Yggdrax morton.py:13 — 21 bits/axis * 3 axes = 63 morton bits.
-_MORTON_BITS = 63
 # Yggdrax octree.py:_MAX_MORTON_LEVEL — limit is 21 (bits/axis).
 _MAX_MORTON_LEVEL = 21
 
@@ -61,17 +56,6 @@ def _morton_encode_np(positions: np.ndarray, bounds_min: np.ndarray,
     y = _spread3_u64(coords[:, 1])
     z = _spread3_u64(coords[:, 2])
     return x | (y << np.uint64(1)) | (z << np.uint64(2))
-
-
-def _compact1_u64(x: np.ndarray) -> np.ndarray:
-    """Inverse of `_spread3_u64`: pulls every 3rd bit back together."""
-    x = x & _M5
-    x = (x ^ (x >> np.uint64(2))) & _M4
-    x = (x ^ (x >> np.uint64(4))) & _M3
-    x = (x ^ (x >> np.uint64(8))) & _M2
-    x = (x ^ (x >> np.uint64(16))) & _M1
-    x = (x ^ (x >> np.uint64(32))) & _MASK_21
-    return x
 
 
 # =====================================================================
@@ -166,10 +150,9 @@ def _octant_at_depth(code: np.ndarray, depth: np.ndarray) -> np.ndarray:
 
 
 def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
-                   leaf_size: int) -> Tuple[OctreePayload, int]:
+                   leaf_size: int) -> OctreePayload:
     """Host-side build: Morton sort, leaf bucketize, LCA enumerate,
-    dedup, parent/child scatter, refit. Returns `(OctreePayload,
-    tree_depth)`.
+    dedup, parent/child scatter, refit.
     """
     n = int(prim_lo_np.shape[0])
     if n == 0:
@@ -205,7 +188,7 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
 
     # Single-leaf shortcut: only the root exists, holding all primitives.
     if num_leaves == 1:
-        return _payload_single_leaf(prim_lo_np, prim_hi_np, sorted_indices), 1
+        return _payload_single_leaf(prim_lo_np, prim_hi_np, sorted_indices)
 
     # --- Note step build:2 (LCA enumeration) — for each adjacent pair of
     # Morton-sorted leaves, compute their lowest-common-ancestor depth +
@@ -391,7 +374,7 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
     # and sorts first (note quirk #8). Verify.
     assert oct_node_depths[0] == 0, "root must be at slot 0 (yggdrax invariant)"
 
-    payload = OctreePayload(
+    return OctreePayload(
         node_lower=jnp.asarray(node_lower),
         node_upper=jnp.asarray(node_upper),
         node_children=jnp.asarray(node_children),
@@ -401,8 +384,6 @@ def _build_payload(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
         prim_ids=jnp.asarray(sorted_indices),
         root=jnp.asarray(np.int32(0)),
     )
-    tree_depth = int(oct_node_depths.max() + 1)
-    return payload, tree_depth
 
 
 def _payload_single_leaf(prim_lo_np: np.ndarray, prim_hi_np: np.ndarray,
@@ -432,5 +413,4 @@ def build(lower: ArrayLike, upper: ArrayLike, config: Config | None = None) -> O
     config = config if config is not None else Config()
     prim_lo_np, prim_hi_np = _validated_bounds(lower, upper)
     leaf_size = config.leaf_size_threshold
-    payload, _ = _build_payload(prim_lo_np, prim_hi_np, leaf_size)
-    return payload
+    return _build_payload(prim_lo_np, prim_hi_np, leaf_size)

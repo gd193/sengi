@@ -1,0 +1,34 @@
+provenance = "Stanford Armadillo; simplified with libigl QSlim"
+source = "https://graphics.stanford.edu/pub/3Dscanrep/armadillo/Armadillo.ply.gz"
+closed = true
+oriented = true
+
+[variants."small"]
+faces = 320
+file = "small.ply"
+sha256 = "20bc92b56b59c3de2e1454e82f0ffb53de90fb02fe17a92323e3dd17099705d7"
+
+[variants."medium"]
+faces = 5120
+file = "medium.ply"
+sha256 = "7a01e3c1523c5ee1a75152c21ae97d0a6c926c83a80a2f348d8dc0d97de88433"
+
+[variants."large"]
+faces = 20480
+file = "large.ply"
+sha256 = "053e1ca149d16844d36efb60d03039a62346a5ca4d8a235590f5890668a008a5"
+
+[variants."82k"]
+faces = 81920
+file = "82k.ply"
+sha256 = "17c6fa0e7091679a52daaa83fbaa527163483507b2b9b0ad7feb6b24a9729b82"
+
+[variants."328k"]
+faces = 327680
+file = "328k.ply"
+sha256 = "fc39b14e45afa4cc150c0dafff91497d481ee8396dfa03b79c8ec34d56804f65"
+
+[variants."1.3m"]
+faces = 1310720
+recipe = { kind = "subdivide", source = "328k" }
+geometry_sha256 = "6bd4ad1cea2ef09ce9237df3a81b16c1e19620aa83f88b52ec565360280962cc"

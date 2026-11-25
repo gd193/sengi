@@ -70,3 +70,5 @@ mamba run -n spatial-dev python -m pytest tests
 For source development, set `PYTHONPATH="$PWD/src"` when running tests in that
 environment. Omit it to exercise the installed package and bundled native
 headers.
+
+The [query comparison suite](docs/benchmark_suite.md) measures Sengi and independent GPU references on common mesh, point and segment fixtures. The [mesh catalog](asset/README.md) includes four closed meshes at six matched sizes up to 1,310,720 triangles.

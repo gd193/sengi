@@ -217,7 +217,6 @@ def _sah_split(node_lo: np.ndarray, node_hi: np.ndarray,
         a1 = (axis + 2) % 3
         d0 = float(extent[a0])
         d1 = float(extent[a1])
-        d_axis = float(extent[axis])
 
         for i in range(2 * n_prims):
             if s_type[i] == _EVENT_END:

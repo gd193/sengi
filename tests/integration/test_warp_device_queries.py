@@ -7,7 +7,8 @@ import pytest
 
 wp = pytest.importorskip("warp")
 
-from benchmarks._warp_cases import scene  # noqa: E402
+from benchmarks.adapters.sengi import prepare, prepare_boundary  # noqa: E402
+from benchmarks.workloads import builtin_geometry  # noqa: E402
 from sengi.bvh.device_tree import DeviceTree
 from sengi.metrics.nearest import Euclidean
 from sengi.primitives.items import PointItem3
@@ -182,7 +183,7 @@ def test_nearest_and_static_knn_inside_custom_kernel(k, coordinates, tmp_path):
 
 @pytest.mark.parametrize("mode", ["first", "any", "count", "all"])
 def test_ray_device_modes_match_host(mode):
-    index = scene("triangles", 64).index
+    index, _ = prepare(builtin_geometry("triangles", 64))
     primitive = index.spec.primitive
     tree, geometry = index.data
     query = bind_rays(index.spec, mode, exclude=True)
@@ -275,7 +276,8 @@ def test_ray_device_modes_match_host(mode):
 
 @pytest.mark.parametrize("kind", ["segments2", "triangles"])
 def test_boundary_device_functions_compose(kind):
-    index, boundary, _ = scene(kind, 64)
+    index, raw = prepare(builtin_geometry(kind, 64))
+    boundary = prepare_boundary(index, raw, {"closest_silhouette"})
     primitive = index.spec.primitive
     tree, geometry = index.data
     classification = bind_classification(index.spec)

@@ -90,7 +90,6 @@ def _compute_object_split(node_lo: np.ndarray, node_hi: np.ndarray,
     if no valid bucketed split was found (caller falls back to longest-
     axis-centre on the centroid bbox).
     """
-    n = prim_idx.shape[0]
     extent = node_hi - node_lo
     total_sa = _surface_area_np(node_lo, node_hi, dimension)
     if total_sa <= 0.0 and dimension == 3:

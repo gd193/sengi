@@ -1,109 +1,89 @@
-# GPU query references
+# Native benchmark references
 
-FCPW: 2D closest point, first hit, occlusion and Euclidean silhouette.
-cuBQL: 2D/3D point nearest. Each uses upstream query code and its own tree.
-cuBQL uses spatial median in 2D; its SAH builder supports only float3.
+Native references use independent indexes over the suite's geometry and share
+the input arrays generated for each case. They are compiled against external
+checkouts and selected with `python -m benchmarks run --adapter ...`.
 
-Sengi binds each query to its index specification and times the resident Warp
-kernel. The report hashes the installed Python sources and native headers.
+| Adapter | Geometry and queries |
+| --- | --- |
+| `cubql` | Triangle rays, nearest, 4-nearest, parity, region and radius tests. 2D/3D point nearest and KNN. |
+| `fcpw` | GPU closest point, first hit, occlusion and silhouette on triangle meshes and indexed 2D segments. Star radius and boundary sampling in both dimensions. |
+| `optix` | Hardware triangle ray crossings, first hit, occlusion and point parity. |
+| `cudakdtree_fixed`, `cudakdtree_heap`, `cudakdtree_fixed_stack`, `cudakdtree_heap_stack` | 2D/3D point KNN with CCT or stack traversal. |
 
-Build against an existing FCPW CUDA/Slang-RHI build and cuBQL checkout:
+GPU timings use CUDA graph events, with CUPTI activity timing for OptiX.
+Construction,
+transfers, shader compilation and result decoding are outside the timing
+interval. Point KNN reports squared distances. Heap candidates are sorted and
+remapped to original primitive IDs inside the measured cudaKDTree kernel.
+The FCPW sampler rejects proposals outside the ball inside the measured shader.
 
-```sh
-python -m benchmarks.build_references \
-  --fcpw /path/to/fcpw --fcpw-build /path/to/fcpw-build \
-  --cubql /path/to/cuBQL --cuda /path/to/cuda --output /path/to/bin
-CUDA_VISIBLE_DEVICES=0 python -m benchmarks.warp_reference_queries \
-  --binaries /path/to/bin --output /path/to/results
-```
+## Build and run
 
-The FCPW build expects `source/deps/slang-rhi` and `_deps/slang-src` under
-its build directory. The queue shim targets the recorded Slang-RHI version;
-it accesses private CUDA stream/heap state to isolate one upstream kernel.
+Use a Conda CUDA toolkit with a supported C++ compiler and (for OptiX) CUPTI
+headers and libraries. Select the architecture with `--arch`. The native build
+manifest records the command, compiler versions, upstream revisions and content
+hashes for each executable. Use a work-drive output directory.
 
-Timings exclude build, compilation, uploads, parameter copies and host dispatch.
-CUDA graphs repeat the resident kernel; block sizes and query buffers match.
-FCPW initializes miss outputs before timing. Its graph output is checked against
-ordinary RHI dispatch. Nearest checks allow distance ties while checking primitive
-membership and distance. Silhouette IDs are mapped through FCPW's own feature data.
+The triangle baseline used cuBQL `20f9db19`, FCPW `e498ca81`, Slang-RHI
+`12f1bffb`, and OptiX 9.1 `f1f6dd80`. The previous
+point-KNN comparison used cuBQL `d2e62a39` and cudaKDTree `37ce4c37`.
+For a build that includes triangles and points, use a cuBQL revision that
+includes the triangle box and radius queries.
 
-Results include samples, input/source/binary hashes, tree sizes and register/local
-memory usage. Generated Warp CUDA C++ and PTX are saved alongside outputs. Use
-`--reuse-reference /path/to/results.json` to reuse reference timings and outputs
-only when input and executable hashes match. Generated files stay outside git.
-
-Reuse also checks GPU UUID, shaders/compiler, timing settings and output hashes.
-`--fixtures star cluster2 cluster3` adds nonconvex and clustered held-out data.
-`--leaf-size`, `--reference-leaf-size` (cuBQL), `--block-dim` and `--queries`
-expose tuning; settings are recorded.
-For parity claims compare competitive reference block sizes, not just one matched
-launch. Reference trees remain independent; FCPW/cuBQL use their own predicates.
-
-## Independent k-nearest point references
-
-`build_knn_references.py` pins clean official upstream checkouts to cuBQL
-`d2e62a39b83c1b8ca72c266703fdc0dfdcb67952` and cudaKDTree
-`37ce4c377170d13670632143b976192d5b69ed03`. Sources:
-https://github.com/ingowald/cuBQL and https://github.com/ingowald/cudaKDTree.
-No upstream code is patched. Each dimension/k/list combination is compiled
-separately; architecture, compiler, commands, source hashes and binary hashes
-are recorded in `build.json`. All generated files belong outside the checkout.
+Initialize FCPW's Eigen and Slang-RHI submodules. Build Slang-RHI with CUDA support before building the GPU adapter.
 
 ```sh
-ART=/path/to/local/knn-artifacts
-CUDA_ROOT=/path/to/cuda
-git clone https://github.com/ingowald/cuBQL "$ART/cuBQL"
-git -C "$ART/cuBQL" checkout d2e62a39b83c1b8ca72c266703fdc0dfdcb67952
-git clone https://github.com/ingowald/cudaKDTree "$ART/cudaKDTree"
-git -C "$ART/cudaKDTree" checkout 37ce4c377170d13670632143b976192d5b69ed03
-python -m benchmarks.build_knn_references \
-  --cubql "$ART/cuBQL" --cudakdtree "$ART/cudaKDTree" \
-  --cuda "$CUDA_ROOT" --output "$ART/knn-bin" --arch 86
-CUDA_VISIBLE_DEVICES=0 python -m benchmarks.warp_knn_reference \
-  --binaries "$ART/knn-bin" --output "$ART/knn-smoke" \
-  --dimensions 2 3 --k 4 --sizes 1024 --queries 1024 --fixtures uniform
+cmake -S "$FCPW" -B "$ART/fcpw-build" -DFCPW_USE_ENOKI=OFF \
+    -DFCPW_ENABLE_GPU_SUPPORT=ON -DSLANG_RHI_ENABLE_OPTIX=OFF \
+    -DSLANG_RHI_ENABLE_VULKAN=OFF -DSLANG_RHI_ENABLE_CPU=OFF
+cmake --build "$ART/fcpw-build" --target slang-rhi -j8
+
+python -m benchmarks build --adapter cubql,fcpw,optix,cudakdtree \
+    --cuda "$CUDA_ROOT" --cuda-host "$CUDA_HOST_CXX" --cubql "$CUBQL" \
+    --cudakdtree "$CUDA_KD_TREE" --fcpw "$FCPW" --fcpw-build "$ART/fcpw-build" \
+    --optix "$OPTIX" --output "$ART/bin"
+python -m benchmarks run --suite triangles --binaries "$ART/bin" \
+    --count 512 --param radius=0.05 --output "$ART/triangles"
+python -m benchmarks run --suite point_knn --binaries "$ART/bin" \
+    --mesh points2,points3 --size 1024 --count 1024 --output "$ART/knn"
+python -m benchmarks report "$ART/triangles"
 ```
 
-The full matrix covers uniform, clustered and sphere/circle surface float32
-points in 2D/3D, k=1/4/8/16/32/64/128, three N scales and two Q scales.
-`--implementations`, `--dimensions`, `--k`, `--sizes`, `--queries`,
-`--fixtures`, `--block-dim`, `--leaf-size`, `--no-cache-bounds`,
-`--node-access packed|indexed`, and `--scheduling auto|flat|grouped` filter/tune runs.
-Caching, node access and scheduling vary independently. The default is cached,
-packed, and the policy's schedule (grouped for these point queries). Reproduce
-the old combined uncached mode with `--no-cache-bounds --node-access indexed
---scheduling flat`; changing only `--no-cache-bounds` now isolates caching. Timings use
-resident CUDA graphs and events after warmup, excluding construction, JIT,
-transfers and host invocation. All paths emit squared scores, original IDs,
-count and status. Warp uses the generic callback path with Euclidean closest
-and box bound callbacks. cuBQL uses its pointData `findKNN` and independent
-BVH (2D spatial median, 3D SAH); cudaKDTree uses its default independent
-thrust builder and CCT traversal with payload IDs surviving reordering.
-Build defaults include separate `_stack` variants; select them using
-`--implementations cudakdtree_fixed_stack cudakdtree_heap_stack`.
-`--traversals cct` limits builds to the default CCT variants.
-Both FixedCandidateList and HeapCandidateList are measured. Already sorted cuBQL and fixed-list outputs are emitted directly. Heap entries
-are sorted in place with O(k log k) heapsort inside the timed kernel, without
-a duplicate candidate array; ID remapping is also timed.
+cuBQL builds 2D points with a spatial median and uses SAH for 3D points and
+meshes. Its leaf threshold defaults to 4 and can be set with
+`--reference-leaf-size`.
+`--launches` sets the number of GPU launches per sample. The FCPW queue shim accesses private Slang-RHI CUDA queue and heap
+state. Recheck Slang-RHI compatibility if the revision changes. On the CUDA
+13.2 lab toolkit, use Clang as the nvcc host compiler for cuBQL.
 
-All implementations may select any equally close subset. The sampled NumPy
-float64 oracle checks cardinality, distance order, membership, uniqueness and
-padding. Incorrect results leave a FAILED row in `results.json`.
-`--validate-samples` controls oracle coverage. Fixtures are
-seeded and saved as common row-major little-endian float32 binary arrays.
-Outputs are separate `.scores` float32 and `.ids`, `.count`, `.status` int32
-arrays; raw per-repeat milliseconds and provenance are retained.
+## Native fixture exchange
 
-Main measurements are uncapped. `--cap-squared` enables a diagnostic comparison
-against closed-cap NumPy semantics and deliberately fails incompatibilities.
-At the pinned cuBQL revision, `insert_linear` checks `>= sqrDistMax` only when
-its list is already full, accepting out-of-cap candidates while filling;
-A host-only probe against the actual pinned header confirms cap=1 accepts a
-score=4 candidate into a partially filled list. Exact-boundary behavior also
-depends on upstream traversal. Newer revisions
-may reject `>=` before insertion, giving open-cap semantics. Never silently
-patch or post-filter the pinned query to claim cap equivalence. cudaKDTree's
-radius-based candidate lists also require boundary compatibility checks.
-External wrappers require nonempty fixtures and cannot expose upstream traversal
-failure status; synthesized status is 1 for any result and 0 otherwise. Empty,
-invalid and numerical-failure contracts remain project implementation tests.
+The runner writes a temporary directory with `manifest.tsv`, `arrays/`, and
+`out/`. The manifest starts with `sengi-native-1`, followed by the block
+size, warmups, launches per repeat, repeats and leaf threshold. Subsequent
+tab-separated records have these fields.
+
+- `geometry NAME PATH DTYPE SHAPE` describes each geometry array.
+- `case KEY MODE BATCH_SIZE` opens one selected case and sets its output prefix
+  to `out/KEY`.
+- `input NAME PATH DTYPE SHAPE` describes an array for the open case.
+- `parameter NAME VALUE` supplies a scalar mode parameter.
+
+Array paths are relative to the fixture directory. Shapes are comma-separated
+dimensions. Arrays use contiguous row-major little-endian element ordering.
+Identical arrays are stored once per exchange. The executable builds its
+index from the geometry records, runs the requested cases against that index
+and writes per-repeat milliseconds and binary answer fields at the output prefix.
+Build and feature preparation timings, where measured, are emitted separately. The adapter decodes the corresponding named answer arrays, including
+native interaction records, into the query catalog's output fields.
+
+The scalar and vector field names are `.value`, `.ids`, `.dist` and
+`.points`. Integer fields use little-endian int32 and floating fields use
+little-endian float32. Ray and nearest list fields use the requested capacity
+as their second dimension. The point KNN paths write squared distances in
+`.scores` with scalar `.count` and `.status` fields. The FCPW GPU executable
+writes `.bin` interaction records with float32 point (three), normal (three),
+UV (two) and distance (one), followed by an int32 primitive ID. Each file has
+one row per case query. The adapter checks the expected output shape before
+publishing the normalized arrays.

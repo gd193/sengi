@@ -1,0 +1,33 @@
+provenance = "Torus with triangles above centroid z=0.2 removed"
+closed = false
+oriented = true
+
+[variants."small"]
+faces = 240
+geometry_sha256 = "6152b692b1c8b8cdf35c47fcad01badeed19d52af1a399ef62d30c9af7fbe93b"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "small", axis = 2, upper = 0.2 }
+
+[variants."medium"]
+faces = 3840
+geometry_sha256 = "6aaaab48a6ae11cf04527f1abfc3a6201d356fbb8ea6d72ff3ccd62326405878"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "medium", axis = 2, upper = 0.2 }
+
+[variants."large"]
+faces = 15040
+geometry_sha256 = "ee7b9a16a84e1b5779a4f36cd0e82dd336f8d93a83929e52379c8bf5698cc6ed"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "large", axis = 2, upper = 0.2 }
+
+[variants."82k"]
+faces = 60160
+geometry_sha256 = "85a2ff2a1037ed3ee5287c5b2380afb8bb2f3d769ee9577cd811497c22fbb510"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "82k", axis = 2, upper = 0.2 }
+
+[variants."328k"]
+faces = 240640
+geometry_sha256 = "1a2cedc3013e32a1f05b154c54481f501a1504485b16d1a999d27bfce9c9c37c"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "328k", axis = 2, upper = 0.2 }
+
+[variants."1.3m"]
+faces = 960000
+geometry_sha256 = "c0396628afa100fd74345b29c2c8f3b7f69cd0a855335ce7bfa35d9651c0f947"
+recipe = { kind = "clip_centroids", mesh = "torus", source = "1.3m", axis = 2, upper = 0.2 }

@@ -1,5 +1,4 @@
 """Host selection of device traversal operations."""
-from sengi import bvh
 import pytest
 import warp as wp
 

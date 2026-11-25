@@ -11,7 +11,6 @@ from sengi.boundary.data import _adapter_policy, _check_functions
 from sengi.boundary.sampling import SamplingMeta
 from sengi.bvh.device_tree import DeviceTree
 from sengi.queries.nearest import prepare_nearest
-from sengi.warp.arrays import load_array
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
 
 H = TypeVar("H")
