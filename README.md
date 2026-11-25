@@ -63,7 +63,7 @@ Build and install with conda tooling from the repository root.
 ```sh
 mamba create -n spatial-build -c conda-forge rattler-build
 mamba run -n spatial-build rattler-build build --recipe recipe/recipe.yaml -c conda-forge --output-dir "$PWD/output"
-mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.4.0 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
+mamba create -n spatial-dev -c "file://$PWD/output" -c conda-forge python=3.14 sengi=0.5.0 jax=0.10.2 warp-lang=1.18.0 pytest scipy trimesh
 mamba run -n spatial-dev python -m pytest tests
 ```
 
