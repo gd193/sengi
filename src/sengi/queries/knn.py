@@ -190,4 +190,4 @@ def _make_knn(primitive, k, metric, *, predicate=None,
                        block_dim, device=knn, _check_batch=partial(validate_batch_size, k=k), ops=ops, k=k, return_points=return_points, components=components,
                       native_providers=(ops, metric, predicate, result_policy),
                       native_requirements=(candidate_build_options(candidates, k, return_points or result_policy is not None),),
-                      max_unroll=max(16, min(k, REGISTER_LIMIT)), **options)
+                      **options)

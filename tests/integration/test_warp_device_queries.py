@@ -140,6 +140,7 @@ def test_nearest_and_static_knn_inside_custom_kernel(k, coordinates, tmp_path):
     wp.set_module_options(
         {"extra_build_options": own, "fast_math": False}, module=kernel.module
     )
+    caller_unroll = wp.get_module_options(kernel.module)["max_unroll"]
     configure_query_kernel(kernel, nearest, knn, other)
     first = kernel.module.get_module_hash()
     configure_query_kernel(kernel, nearest, knn, other)
@@ -151,7 +152,7 @@ def test_nearest_and_static_knn_inside_custom_kernel(k, coordinates, tmp_path):
         '#include "user_query.h"'
         in configured["extra_build_options"].extra_cuda_preamble
     )
-    assert configured["max_unroll"] >= min(k, 64)
+    assert configured["max_unroll"] == caller_unroll
 
     device = _device()
     dt, dg = device_payload(DeviceTree, tree, device), device_payload(Geometry, geometry, device)

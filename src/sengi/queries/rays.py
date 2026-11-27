@@ -9,7 +9,7 @@ import warp as wp
 from sengi.warp.native import package_headers
 from sengi.queries.domain import Ray, RayOps, prepare_ray
 from sengi.warp.launch import BoundQuery, bind_query, cache_query
-from sengi.jax.ffi import _crossing_args
+from sengi.jax.ffi import _ray_args
 from sengi.warp.contracts import make_struct
 from sengi.warp.arrays import load_array, store_array
 from sengi.bvh.traversal.scheduling import make_walk
@@ -33,10 +33,10 @@ class RayQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT, ModeT]
         tree, geometry = data
         if exclude_face is not None and not self.exclusion:
             raise ValueError("construct this ray query with exclude=True")
-        args, shape = _crossing_args(origin, direction, min_t, max_t,
-            -1 if exclude_face is None else exclude_face, self.primitive.dimension)
-        if not self.exclusion:
-            args = args[:4]
+        if self.exclusion and exclude_face is None:
+            exclude_face = -1
+        args, shape = _ray_args(origin, direction, min_t, max_t,
+                                self.primitive.dimension, exclude_face)
         shapes = None
         if self.mode == "all":
             max_hits = index(max_hits)
@@ -292,12 +292,10 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     excluded = "load_array(excluded, i)" if exclusion else "-1"
     body = [f"wp.static(ray_query)(i, load_array(origins, i), load_array(directions, i), load_array(minimum, i), load_array(maximum, i), {excluded}, "
             f"tree, geometry, {times}, {faces}, out_count, out_status)"]
-    # On sm_86 nine resident 128-thread blocks allow 56 registers per thread.
-    # Shared spills keep the deferred-node stack as the only local-memory traffic.
     kernel_options = {}
     if (group_leaves and forward_3d and block_dim == 128 and not exclusion
             and ops.intersect is getattr(primitive, "intersect", None) and not multiple):
-        kernel_options = {"launch_bounds": (block_dim, 9), "enable_cuda_smem_spilling": True}
+        kernel_options = {"enable_cuda_smem_spilling": True}
     return bind_query(RayQuery, "ray_kernel", primitive, inputs, outputs, body,
                       {"ray_query": ray_query}, block_dim, device=device, mode=mode, exclusion=exclusion,
                       kernel_options=kernel_options, native_providers=(ops,), native_requirements=(_RAY_HEADERS._build_options(),),

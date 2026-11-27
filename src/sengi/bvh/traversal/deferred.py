@@ -12,7 +12,6 @@ from sengi.bvh.traversal.abi import cache_entry, entry_index, entry_tag, pack_en
 @dataclass(frozen=True)
 class DeferredFunctions:
     stack_type: type
-    push: wp.Function
     pop: wp.Function
     save: wp.Function
     decode: wp.Function | None
@@ -31,7 +30,7 @@ def deferred_functions(capacity: int, mode: str) -> DeferredFunctions:
                  lmeta: wp.uint64, rmeta: wp.uint64, a: float, b: float, tag_a: bool, tag_b: bool):
             wp.static(push)(stack, size, wp.where(swap, lmeta, rmeta))
 
-        return DeferredFunctions(Stack, push, pop, save, None)
+        return DeferredFunctions(Stack, pop, save, None)
 
     if mode == "cached":
         @wp.func
@@ -40,7 +39,7 @@ def deferred_functions(capacity: int, mode: str) -> DeferredFunctions:
             deferred = wp.where(swap, pack_entry(left, tag_a), pack_entry(right, tag_b))
             wp.static(push)(stack, size, cache_entry(deferred, wp.where(swap, a, b)))
 
-        return DeferredFunctions(Stack, push, pop, save, None)
+        return DeferredFunctions(Stack, pop, save, None)
 
     else:
         @wp.func
@@ -52,7 +51,7 @@ def deferred_functions(capacity: int, mode: str) -> DeferredFunctions:
         def decode(entry: wp.uint32):
             return entry_index(entry), entry_tag(entry)
 
-    return DeferredFunctions(Stack, push, pop, save, decode)
+    return DeferredFunctions(Stack, pop, save, decode)
 
 
 @lru_cache(maxsize=None)
@@ -62,7 +61,8 @@ def restore_function(Context, State, capacity: int, mode: str,
     if mode == "packed":
         if resume is not None:
             raise ValueError("packed deferred entries cannot recompute bounds")
-        Stack, pop = deferred_functions(capacity, mode).stack_type, deferred_functions(capacity, mode).pop
+        bundle = deferred_functions(capacity, mode)
+        Stack, pop = bundle.stack_type, bundle.pop
 
         @wp.func
         def restore(tree: DeviceTree, ctx: Context, state: wp.ref[State],

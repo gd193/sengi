@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 
 
-def _flatten_vec_queries(x, dimension=3):
+def _flatten_vec_queries(x, dimension):
     x = jnp.asarray(x, dtype=jnp.float32)
     if x.shape[-1:] != (dimension,):
         raise ValueError(f"expected query shape (..., {dimension}), got {x.shape}")
@@ -15,18 +15,17 @@ def _flatten_vec_queries(x, dimension=3):
     return x.reshape((-1, dimension)), batch_shape
 
 
-def _ray_args(origin, direction, minimum, maximum, dimension=3):
+def _ray_args(origin, direction, minimum, maximum, dimension, exclude_face=None):
     origins, shape = _flatten_vec_queries(origin, dimension)
     directions, dshape = _flatten_vec_queries(direction, dimension)
     if shape != dshape:
         raise ValueError("ray_origin and ray_direction batch shapes must match")
     bounds = tuple(jnp.broadcast_to(jnp.asarray(v, jnp.float32), shape).reshape((-1,))
                    for v in (minimum, maximum))
-    return (origins, directions, *bounds), shape
+    args = (origins, directions, *bounds)
+    if exclude_face is None:
+        return args, shape
 
-
-def _crossing_args(origin, direction, minimum, maximum, exclude_face, dimension=3):
-    args, shape = _ray_args(origin, direction, minimum, maximum, dimension)
     face = jnp.asarray(exclude_face)
     if not jnp.issubdtype(face.dtype, jnp.integer):
         raise TypeError("exclude_face must contain integer face IDs")

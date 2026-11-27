@@ -1,3 +1,13 @@
+# Compiler settings
+
+Prefer compiler defaults for numeric tuning parameters. Hard-coded launch
+bounds and other numeric compiler settings can overfit to a particular GPU
+model, architecture, or compiler version. Experiments and profiling may use
+these overrides without prior approval. Using one outside that scope requires
+explicit permission. Record the approved value, the approver’s name, and the
+approval date alongside the setting. Boolean compiler options such as
+`enable_cuda_smem_spilling` are allowed without this approval.
+
 # Speed benchmarks
 
 The benchmark suite compares GPU acceleration structures. Every timed query and

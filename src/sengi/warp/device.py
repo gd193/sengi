@@ -39,12 +39,10 @@ def configure_query_kernel(kernel: Any, *queries: DeviceQuery) -> Any:
             if own is registered:
                 own = original
         requirements = wp.ModuleBuildOptions()
-        unroll = options.get("max_unroll", 16)
         for query in queries:
             source = wp.get_module_options(query._device_kernel.module)
             requirements = merge_native_options(requirements, source["extra_build_options"])
-            unroll = max(unroll, source.get("max_unroll", 16))
         build = requirements if own is None else own.merged(requirements)
-        wp.set_module_options({"extra_build_options": build, "max_unroll": unroll}, module=module)
+        wp.set_module_options({"extra_build_options": build}, module=module)
         _registrations[module] = own, build
     return kernel
