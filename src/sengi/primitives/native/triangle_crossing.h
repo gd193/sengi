@@ -9,9 +9,13 @@ CUDA_CALLABLE inline bool owns_edge(double ax, double ay, double bx, double by,
     return dy > 0 || (dy == 0 && dx < 0);
 }
 
-// A dynamic vector subscript can force the three coordinates into CUDA local memory.
-CUDA_CALLABLE inline float ray_coordinate(const wp::vec3 &v, int axis) {
-    return axis == 0 ? v[0] : axis == 1 ? v[1] : v[2];
+// Project each vertex in the same cyclic coordinate order as the prepared ray.
+CUDA_CALLABLE inline wp::vec3 ray_frame_vertex(const wp::vec3 &v, int dominant_axis) {
+    if (dominant_axis == 0)
+        return wp::vec3(v[1], v[2], v[0]);
+    if (dominant_axis == 1)
+        return wp::vec3(v[2], v[0], v[1]);
+    return v;
 }
 
 template <class Ray>
@@ -21,7 +25,6 @@ CUDA_CALLABLE inline wp::vec2 triangle_crossing(const Ray &ray, float min_t, flo
     const wp::vec3 o = ray.origin, d = ray.direction;
     const float lo_t = min_t, hi_t = max_t;
 
-    const int kx = ray.axes[0], ky = ray.axes[1], kz = ray.axes[2];
     const auto triangle_t = [&](float &result) {
         // Reuse one predicate at both precisions. -1 asks for the double path.
         const auto solve = [&](auto zero) {
@@ -36,14 +39,17 @@ CUDA_CALLABLE inline wp::vec2 triangle_crossing(const Ray &ray, float min_t, flo
             constexpr float rounding = 8.0f * 1.1920928955078125e-7f;
             for (int i = 0; i < 3; ++i) {
                 const wp::vec3 v = i == 0 ? a0 : i == 1 ? b0 : c0;
-                const S a = static_cast<S>(ray_coordinate(v, kx)) - static_cast<S>(ray.frame_origin[0]);
-                const S b = static_cast<S>(ray_coordinate(v, ky)) - static_cast<S>(ray.frame_origin[1]);
-                z[i] = static_cast<S>(ray_coordinate(v, kz)) - static_cast<S>(ray.frame_origin[2]);
+                const wp::vec3 frame = ray_frame_vertex(v, ray.dominant_axis);
+                const S a = static_cast<S>(frame[0]) - static_cast<S>(ray.frame_origin[0]);
+                const S b = static_cast<S>(frame[1]) - static_cast<S>(ray.frame_origin[1]);
+                z[i] = static_cast<S>(frame[2]) - static_cast<S>(ray.frame_origin[2]);
                 x[i] = a - sx * z[i];
                 y[i] = b - sy * z[i];
-                uncertainty[i] = rounding * wp::max(wp::abs(a) + wp::abs(sx * z[i]),
-                                                    wp::abs(b) + wp::abs(sy * z[i])) +
-                                 static_cast<S>(1.e-37f);
+                if constexpr (sizeof(S) == sizeof(float)) {
+                    uncertainty[i] = rounding * wp::max(wp::abs(a) + wp::abs(sx * z[i]),
+                                                        wp::abs(b) + wp::abs(sy * z[i])) +
+                                     static_cast<S>(1.e-37f);
+                }
             }
             S e[3], error[3];
             bool positive = false, negative = false, uncertain = false;
@@ -61,7 +67,8 @@ CUDA_CALLABLE inline wp::vec2 triangle_crossing(const Ray &ray, float min_t, flo
                 }
                 positive |= e[i] > error[i];
                 negative |= e[i] < -error[i];
-                uncertain |= !(wp::abs(e[i]) > error[i]);
+                if constexpr (sizeof(S) == sizeof(float))
+                    uncertain |= !(wp::abs(e[i]) > error[i]);
             }
             if (positive && negative)
                 return 0;
@@ -72,10 +79,11 @@ CUDA_CALLABLE inline wp::vec2 triangle_crossing(const Ray &ray, float min_t, flo
             const S det = e[0] + e[1] + e[2];
             if (det == 0)
                 return 0; // Parallel/coplanar faces have no isolated crossing.
-            const S numerator = e[0] * z[0] + e[1] * z[1] + e[2] * z[2];
-            const S denominator = det * static_cast<S>(ray.frame_direction[2]);
-            S t = numerator / denominator;
+            S t;
             if constexpr (sizeof(S) == sizeof(float)) {
+                const S numerator = e[0] * z[0] + e[1] * z[1] + e[2] * z[2];
+                const S denominator = det * static_cast<S>(ray.frame_direction[2]);
+                t = numerator / denominator;
                 const S num_error =
                     rounding *
                         (wp::abs(e[0] * z[0]) + wp::abs(e[1] * z[1]) + wp::abs(e[2] * z[2])) +

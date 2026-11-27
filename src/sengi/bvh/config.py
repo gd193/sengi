@@ -7,7 +7,7 @@ from operator import index
 class Config:
     """Static build settings."""
 
-    leaf_size_threshold: int = 8
+    leaf_size_threshold: int = 4
 
     def __post_init__(self):
         try:

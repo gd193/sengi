@@ -92,8 +92,6 @@ template <class Ray>
 CUDA_CALLABLE inline wp::vec2 first_ray_box(const Ray &ray, const wp::vec3 &inverse,
                                             const wp::vec3 &lower, const wp::vec3 &upper,
                                             float minimum, float maximum) {
-    if (wp::isnan(inverse[0]))
-        return ray_box(ray, lower, upper, minimum, maximum, 3);
     float enter = minimum, leave = maximum;
     for (int axis = 0; axis < 3; ++axis) {
         const float t0 = (lower[axis] - ray.origin[axis]) * inverse[axis];

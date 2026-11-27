@@ -37,12 +37,14 @@ CUDA_CALLABLE inline void store_array(Array &values, Index index, Value value) {
 
 // Packed layout adapted from NVIDIA Warp bvh.h; Apache-2.0.
 // Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES.
-CUDA_CALLABLE inline wp::vec4 load_node(const wp::array_t<wp::vec4> &values, int index) {
+CUDA_CALLABLE inline wp::vec4 load_node_bound(const wp::array_t<wp::vec4> &nodes, int index, int half) {
+    // Two contiguous float4 rows per node. Widen before scaling the node index.
+    const wp::vec4 *row = nodes.data + size_t(index) * 2 + half;
 #if defined(__CUDA_ARCH__)
-    const float4 value = __ldg(reinterpret_cast<const float4 *>(values.data + index));
+    const float4 value = __ldg(reinterpret_cast<const float4 *>(row));
     return wp::vec4(value.x, value.y, value.z, value.w);
 #else
-    return values.data[index];
+    return *row;
 #endif
 }
 

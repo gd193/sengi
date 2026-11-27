@@ -14,7 +14,7 @@ class Ray:
     direction: wp.vec3
     inverse: wp.vec3
     fast: bool
-    axes: wp.vec3i
+    dominant_axis: int
     frame_origin: wp.vec3
     frame_direction: wp.vec3
     shear: wp.vec2
@@ -31,16 +31,23 @@ def prepare_ray(origin: wp.vec3, direction: wp.vec3, dimension: int) -> Ray:
     ray.fast = wp.min(wp.abs(components)) >= 1.e-20
     if ray.fast:
         ray.inverse = wp.cw_div(wp.vec3(1.0), components)
-    kz = int(0)
-    if wp.abs(direction[1]) > wp.abs(direction[kz]):
-        kz = 1
-    if wp.abs(direction[2]) > wp.abs(direction[kz]):
-        kz = 2
-    kx, ky = (kz+1)%3, (kz+2)%3
-    ray.axes = wp.vec3i(kx, ky, kz)
-    ray.frame_origin = wp.vec3(origin[kx], origin[ky], origin[kz])
-    ray.frame_direction = wp.vec3(direction[kx], direction[ky], direction[kz])
-    ray.shear = wp.vec2(direction[kx]/direction[kz], direction[ky]/direction[kz])
+    ax, ay, az = wp.abs(direction[0]), wp.abs(direction[1]), wp.abs(direction[2])
+    # Fixed component accesses let CUDA keep the vectors in registers. Strict
+    # comparisons choose the first axis when magnitudes tie.
+    if az > (ay if ay > ax else ax):
+        ray.dominant_axis = 2
+        ray.frame_origin = origin
+        ray.frame_direction = direction
+    elif ay > ax:
+        ray.dominant_axis = 1
+        ray.frame_origin = wp.vec3(origin[2], origin[0], origin[1])
+        ray.frame_direction = wp.vec3(direction[2], direction[0], direction[1])
+    else:
+        ray.dominant_axis = 0
+        ray.frame_origin = wp.vec3(origin[1], origin[2], origin[0])
+        ray.frame_direction = wp.vec3(direction[1], direction[2], direction[0])
+    frame = ray.frame_direction
+    ray.shear = wp.vec2(frame[0] / frame[2], frame[1] / frame[2])
     return ray
 
 

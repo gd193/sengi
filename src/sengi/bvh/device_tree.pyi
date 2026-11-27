@@ -3,11 +3,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 import jax
+import numpy as np
+from numpy.typing import NDArray
 import warp as wp
 
 from sengi.bvh.config import Config
 from sengi.bvh.index import IndexSpec
-from sengi.warp.contracts import DeviceArray, PrimitiveSpec
+from sengi.warp.contracts import DeviceArray, DeviceArray2D, PrimitiveSpec
 
 H = TypeVar("H")
 D = TypeVar("D")
@@ -25,8 +27,7 @@ class DeviceTree:
     node_leaf_offset: DeviceArray[int]
     node_leaf_count: DeviceArray[int]
     prim_ids: DeviceArray[int]
-    node_ray_lower: DeviceArray[wp.vec4]
-    node_ray_upper: DeviceArray[wp.vec4]
+    packed_nodes: DeviceArray2D[wp.vec4]
 
 
 @dataclass(frozen=True)
@@ -44,8 +45,7 @@ class TreeData:
     node_leaf_offset: jax.Array
     node_leaf_count: jax.Array
     prim_ids: jax.Array
-    node_ray_lower: jax.Array
-    node_ray_upper: jax.Array
+    packed_nodes: jax.Array
     _schema: _IndexSchema
 
     def validate_geometry(self, geometry: object, primitive: object) -> None: ...
@@ -53,3 +53,10 @@ class TreeData:
 def build_device_tree(primitive: PrimitiveSpec[H, D, I, P], data: H,
                config: Config | None = ..., *,
                builder: Literal["sah", "lbvh"] = ...) -> tuple[TreeData, H]: ...
+
+
+def pack_device_tree(primitive: PrimitiveSpec[H, D, I, P], data: H,
+                     node_lower: NDArray[np.float32], node_upper: NDArray[np.float32],
+                     node_left: NDArray[np.int32], node_right: NDArray[np.int32],
+                     node_leaf_offset: NDArray[np.int32], node_leaf_count: NDArray[np.int32],
+                     prim_ids: NDArray[np.int32]) -> tuple[TreeData, H]: ...

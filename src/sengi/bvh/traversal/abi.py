@@ -21,6 +21,10 @@ def stack_functions(capacity, wide):
     return Stack, push, pop
 
 
+@wp.func_native("return bvh::load_node_bound(nodes, index, half);")
+def load_node_bound(nodes: wp.array2d(dtype=wp.vec4), index: int, half: int) -> wp.vec4: ...
+
+
 @wp.func_native("return bvh::pack_node(lower, upper);")
 def pack_node(lower: wp.vec4, upper: wp.vec4) -> wp.uint64: ...
 

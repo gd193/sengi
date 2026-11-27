@@ -46,7 +46,7 @@ def _make_walk(Context, State, bounds, visit, stack_capacity, near_first, packed
     if group_leaves:
         @wp.func
         def walk(tree: DeviceTree, ctx: Context, state: wp.ref[State]):
-            if tree.node_ray_lower.shape[0] == 0:
+            if tree.packed_nodes.shape[0] == 0:
                 return
             node, size = int(0), int(0)
             lower, upper, current = wp.static(read_node)(tree, 0)
@@ -115,7 +115,7 @@ def _make_walk(Context, State, bounds, visit, stack_capacity, near_first, packed
     else:
         @wp.func
         def walk(tree: DeviceTree, ctx: Context, state: wp.ref[State]):
-            if tree.node_ray_lower.shape[0] == 0:
+            if tree.packed_nodes.shape[0] == 0:
                 return
             node, size = int(0), int(0)
             lower, upper, current = wp.static(read_node)(tree, 0)

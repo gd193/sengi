@@ -2,6 +2,10 @@
 
 Morton encoding, radix-tree construction and refitting run in NumPy;
 the builder returns the same JAX-array payload as the SAH builder.
+
+Fixed-size Morton leaves can increase ray traversal work. On the 1.31M-triangle
+Bunny at leaf threshold 16, first-hit rays tested 48 triangles per ray on
+average with LBVH versus 7.5 with SAH, though LBVH built faster.
 """
 from __future__ import annotations
 

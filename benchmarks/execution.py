@@ -33,8 +33,8 @@ def require_cuda_device(device):
 
 @dataclass(frozen=True)
 class Timing:
-    builder: str = "lbvh"
-    leaf_size: int = 16
+    builder: str = "sah"
+    leaf_size: int = 4
     device: str = "cuda:0"
     launches: int = 1
     repeats: int = 3

@@ -24,18 +24,9 @@ ModeT = TypeVar("ModeT", bound=str)
 
 
 @dataclass(frozen=True)
-class _RayHandlers:
-    """Resolved Warp stages retained by the cached query specialization."""
-    emit: wp.Function
-    visit: wp.Function
-    evaluation: str
-
-
-@dataclass(frozen=True)
 class RayQuery(BoundQuery, Generic[HostDataT, DeviceDataT, ItemT, PointT, ModeT]):
     mode: str
     exclusion: bool
-    handlers: _RayHandlers
 
     def __call__(self, data, origin, direction, max_t=jnp.inf, *,
                  min_t=0.0, exclude_face=None, max_hits=None):
@@ -118,9 +109,6 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
 
     @wp.func
     def bounds(ctx: Context, lower: wp.vec3, upper: wp.vec3, state: wp.ref[State]):
-        if wp.static(forward_3d):
-            hit = first_ray_box(ctx.ray, ctx.inverse, lower, upper, ctx.minimum, state.limit)
-            return hit[0], hit[1] > 0.0, False
         hit = ray_box(ctx.ray, lower, upper, ctx.minimum, state.limit, wp.static(primitive.dimension))
         return hit[0], hit[1] > 0.0, False
 
@@ -192,10 +180,21 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
                         return
             return
 
-    handlers = _RayHandlers(emit, visit, "stateful" if multiple else "single")
-    walk = make_walk(Context, State, bounds, handlers.visit, stack_capacity=stack_capacity,
-                     near_first=mode in ("first", "any"), packed=True, test_root=half_open,
-                     group_leaves=(mode == "first" and getattr(primitive, "group_leaves", False)))
+    group_leaves = mode == "first" and getattr(primitive, "group_leaves", False)
+
+    def make_ray_walk(box_test):
+        return make_walk(Context, State, box_test, visit, stack_capacity=stack_capacity,
+                         near_first=mode in ("first", "any"), packed=True,
+                         test_root=half_open, group_leaves=group_leaves)
+
+    walk = make_ray_walk(bounds)
+    if forward_3d:
+        @wp.func
+        def first_bounds(ctx: Context, lower: wp.vec3, upper: wp.vec3, state: wp.ref[State]):
+            hit = first_ray_box(ctx.ray, ctx.inverse, lower, upper, ctx.minimum, state.limit)
+            return hit[0], hit[1] > 0.0, False
+
+        first_walk = make_ray_walk(first_bounds)
 
     @wp.func
     def ray_query(qi: int, origin: Vec, direction: Vec, minimum: float, maximum: float,
@@ -231,7 +230,14 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
             if wp.static(mode == "all"):
                 ctx.times = times
                 ctx.faces = faces
-            wp.static(walk)(tree, ctx, state)
+            if wp.static(forward_3d):
+                # A tiny nonzero direction needs division-based slabs for the entire ray.
+                if wp.isnan(ctx.inverse[0]):
+                    wp.static(walk)(tree, ctx, state)
+                else:
+                    wp.static(first_walk)(tree, ctx, state)
+            else:
+                wp.static(walk)(tree, ctx, state)
         else:
             state.failed = True
         if state.failed:
@@ -286,9 +292,15 @@ def _make_ray_query(primitive, mode, ops, exclude, stack_capacity, block_dim):
     excluded = "load_array(excluded, i)" if exclusion else "-1"
     body = [f"wp.static(ray_query)(i, load_array(origins, i), load_array(directions, i), load_array(minimum, i), load_array(maximum, i), {excluded}, "
             f"tree, geometry, {times}, {faces}, out_count, out_status)"]
+    # On sm_86 nine resident 128-thread blocks allow 56 registers per thread.
+    # Shared spills keep the deferred-node stack as the only local-memory traffic.
+    kernel_options = {}
+    if (group_leaves and forward_3d and block_dim == 128 and not exclusion
+            and ops.intersect is getattr(primitive, "intersect", None) and not multiple):
+        kernel_options = {"launch_bounds": (block_dim, 9), "enable_cuda_smem_spilling": True}
     return bind_query(RayQuery, "ray_kernel", primitive, inputs, outputs, body,
-                      {"ray_query": ray_query}, block_dim, device=device, mode=mode, exclusion=exclusion, handlers=handlers,
-                      native_providers=(ops,), native_requirements=(_RAY_HEADERS._build_options(),),
+                      {"ray_query": ray_query}, block_dim, device=device, mode=mode, exclusion=exclusion,
+                      kernel_options=kernel_options, native_providers=(ops,), native_requirements=(_RAY_HEADERS._build_options(),),
                       components=(("mode", mode),
-                                  ("hit_evaluation", handlers.evaluation),
+                                  ("hit_evaluation", "stateful" if multiple else "single"),
                                   ("output", "times_and_faces" if store_times else "count_and_status")))

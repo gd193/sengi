@@ -13,7 +13,7 @@ import warp as wp
 from sengi.bvh.config import Config
 from sengi.bvh.index import IndexSpec
 from sengi.bvh import lbvh, sah
-from sengi.bvh.tree import MAX_TREE_DEPTH, _int32_array, _pack_ray_nodes, _validate_tree
+from sengi.bvh.tree import MAX_TREE_DEPTH, _int32_array, _pack_nodes, _validate_tree
 from sengi.bvh.bounds import _validated_bounds
 from sengi.warp.contracts import warp_struct
 
@@ -30,8 +30,7 @@ class DeviceTree:
     node_leaf_offset: wp.array(dtype=wp.int32)
     node_leaf_count: wp.array(dtype=wp.int32)
     prim_ids: wp.array(dtype=wp.int32)
-    node_ray_lower: wp.array(dtype=wp.vec4)
-    node_ray_upper: wp.array(dtype=wp.vec4)
+    packed_nodes: wp.array2d(dtype=wp.vec4)
 
 
 @dataclass(frozen=True)
@@ -53,8 +52,7 @@ class TreeData:
     node_leaf_offset: jax.Array
     node_leaf_count: jax.Array
     prim_ids: jax.Array
-    node_ray_lower: jax.Array
-    node_ray_upper: jax.Array
+    packed_nodes: jax.Array
     _schema: _IndexSchema
 
     def validate_geometry(self, geometry: object, primitive: object) -> None:
@@ -79,9 +77,9 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
     if not len(lo):
         empty = jnp.empty((0,), jnp.int32)
         bounds = jnp.empty((0, 3), jnp.float32)
-        packed = jnp.empty((0, 4), jnp.float32)
+        packed = jnp.empty((0, 2, 4), jnp.float32)
         geometry = primitive.pack(data, empty)
-        tree = TreeData(bounds, bounds, empty, empty, empty, empty, empty, packed, packed,
+        tree = TreeData(bounds, bounds, empty, empty, empty, empty, empty, packed,
                         _IndexSchema(IndexSpec(primitive), type(geometry)))
         return tree, geometry
     if len(lo) >= 2**31:
@@ -115,10 +113,17 @@ def build_device_tree(primitive, data, config=None, *, builder="sah"):
         if np.any(node_lo[internal] > node_lo[child]) or np.any(node_hi[internal] < node_hi[child]):
             raise ValueError("tree internal bounds must enclose their children")
 
-    packed = _pack_ray_nodes(node_lo, node_hi, left, right, offset, count)
-    device_ids = jnp.asarray(ids)
+    return pack_device_tree(primitive, data, node_lo, node_hi, left, right, offset, count, ids)
+
+
+def pack_device_tree(primitive, data, node_lower, node_upper, node_left, node_right,
+                     node_leaf_offset, node_leaf_count, prim_ids):
+    """Upload a validated tree and pack its source geometry in leaf order."""
+    packed = _pack_nodes(node_lower, node_upper, node_left, node_right,
+                             node_leaf_offset, node_leaf_count)
+    device_ids = jnp.asarray(prim_ids)
     geometry = primitive.pack(data, device_ids)
-    tree = TreeData(*(jnp.asarray(a) for a in (node_lo, node_hi, left, right, offset, count,
-                                               device_ids, *packed)),
+    tree = TreeData(*(jnp.asarray(a) for a in (node_lower, node_upper, node_left, node_right,
+                                               node_leaf_offset, node_leaf_count, device_ids, packed)),
                     _schema=_IndexSchema(IndexSpec(primitive), type(geometry)))
     return tree, geometry

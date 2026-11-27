@@ -137,6 +137,8 @@ def report_rows(root, *, fp32_only=False):
                 "instrumentation",
                 "build_ms",
                 "build_scope",
+                "index_load_ms",
+                "sah_cache",
                 "geometry_transfer_ms",
                 "launches",
                 "warmups",

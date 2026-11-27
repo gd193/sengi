@@ -50,8 +50,8 @@ def main(argv=None, *, deadline=None):
     run.add_argument("--resume", action="store_true")
     run.add_argument("--cache", type=Path)
     run.add_argument("--binaries", type=Path, default=Path("output/benchmarks/bin"))
-    run.add_argument("--builder", choices=["sah", "lbvh"], default="lbvh")
-    run.add_argument("--leaf-size", type=positive, default=16)
+    run.add_argument("--builder", choices=["sah", "lbvh"], default=Timing.builder)
+    run.add_argument("--leaf-size", type=positive, default=Timing.leaf_size)
     run.add_argument(
         "--reference-leaf-size", type=positive, default=4, help="cuBQL leaf size"
     )

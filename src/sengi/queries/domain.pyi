@@ -15,7 +15,7 @@ class Ray:
     direction: wp.vec3
     inverse: wp.vec3
     fast: bool
-    axes: wp.vec3i
+    dominant_axis: int
     frame_origin: wp.vec3
     frame_direction: wp.vec3
     shear: wp.vec2

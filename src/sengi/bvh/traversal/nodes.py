@@ -5,8 +5,8 @@ from functools import lru_cache
 import warp as wp
 
 from sengi.bvh.device_tree import DeviceTree
-from sengi.bvh.traversal.abi import node_is_leaf, node_lower, node_upper, pack_node
-from sengi.warp.arrays import load_array, load_node
+from sengi.bvh.traversal.abi import node_is_leaf, node_lower, node_upper, pack_node, load_node_bound
+from sengi.warp.arrays import load_array
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,8 @@ def node_functions(packed_nodes: bool) -> NodeFunctions:
     if packed_nodes:
         @wp.func
         def read(tree: DeviceTree, node: int):
-            lo, hi = load_node(tree.node_ray_lower, node), load_node(tree.node_ray_upper, node)
+            lo = load_node_bound(tree.packed_nodes, node, 0)
+            hi = load_node_bound(tree.packed_nodes, node, 1)
             return wp.vec3(lo[0], lo[1], lo[2]), wp.vec3(hi[0], hi[1], hi[2]), pack_node(lo, hi)
 
         @wp.func
@@ -40,7 +41,7 @@ def node_functions(packed_nodes: bool) -> NodeFunctions:
 
         @wp.func
         def metadata(tree: DeviceTree, node: int):
-            return pack_node(load_array(tree.node_ray_lower, node), load_array(tree.node_ray_upper, node))
+            return pack_node(tree.packed_nodes[node, 0], tree.packed_nodes[node, 1])
     else:
         @wp.func
         def read(tree: DeviceTree, node: int):

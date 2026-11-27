@@ -74,8 +74,7 @@ def test_warp_factory_batching_dynamic_data_and_cpu():
     changed = geometry._replace(a=geometry.a+jnp.array([0., 1]), b=geometry.b+jnp.array([0., 1]))
     shifted_tree = replace(
         tree,
-        node_ray_lower=tree.node_ray_lower.at[:, :3].add(jnp.array([0., 1, 0])),
-        node_ray_upper=tree.node_ray_upper.at[:, :3].add(jnp.array([0., 1, 0])),
+        packed_nodes=tree.packed_nodes.at[..., :3].add(jnp.array([0., 1, 0])),
         node_lower=tree.node_lower+jnp.array([0., 1, 0]),
                                  node_upper=tree.node_upper+jnp.array([0., 1, 0]))
     np.testing.assert_allclose(batch(bvh.IndexData(shifted_tree, changed), q)[1], [[0, np.sqrt(2)], [np.sqrt(2), 1]])

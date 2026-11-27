@@ -105,7 +105,7 @@ def _make_silhouette(primitive, metric, adapter, stack_capacity, block_dim):
     def device(point: Query, cap: float, tree: DeviceTree, meta: Meta):
         feature_tree = DeviceTree(tree.node_lower, tree.node_upper, tree.node_left, tree.node_right,
                                  meta.node_feature_offset, meta.node_feature_count, meta.feature_refs,
-                                 tree.node_ray_lower, tree.node_ray_upper)
+                                 tree.packed_nodes)
         return wp.static(nearest)(point, cap, feature_tree, meta)
 
     return SilhouetteQuery(primitive, query, device)

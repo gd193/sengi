@@ -25,11 +25,15 @@ point, distance, original_id, status = nearest(sah.data, points)
 point, distance, original_id, status = nearest(lbvh.data, points)
 ```
 
-Use `bvh.Config(leaf_size_threshold=...)` to configure leaves. Select
+The default leaf-size threshold is 4. Set it with `bvh.Config(leaf_size_threshold=...)`. Select
 `builder="lbvh"` to partition in Morton order. Both builders pack geometry
 into leaf order for traversal. Both support depths up to 64 edges from the root.
 If a split would require a deeper tree, construction raises `ValueError`.
 A larger leaf threshold or a different builder can produce a shallower tree.
+Packed traversal reads one 32-byte record per node. The dynamic JAX leaf
+`tree.packed_nodes` has shape `(nodes, 2, 4)` and dtype `float32`. Its two
+rows hold the lower and upper XYZ bounds. Each fourth lane stores raw topology
+bits for a child index or leaf range endpoint.
 Query result IDs refer to the original input.
 Batch points as `(..., D)`, where `D` is the primitive dimension. Caps are
 scalar or match the query batch. Dynamic inputs, including the index arrays,

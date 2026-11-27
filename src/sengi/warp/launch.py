@@ -58,7 +58,7 @@ class BoundQuery:
         return tuple(v.reshape(shape+v.shape[1:]) for v in values)
 
 
-def array_kernel(name, arguments, body, bindings, *, build=None, max_unroll=None):
+def array_kernel(name, arguments, body, bindings, *, build=None, max_unroll=None, kernel_options=None):
     """Materialize only the flat FFI signature; algorithms stay Warp functions."""
     declarations = ", ".join(f"{key}: T{i}" for i, (key, _) in enumerate(arguments))
     source = f"def {name}({declarations}):\n" + "\n".join("    " + line for line in body) + "\n"
@@ -71,7 +71,8 @@ def array_kernel(name, arguments, body, bindings, *, build=None, max_unroll=None
     options = {"extra_build_options": build}
     if max_unroll is not None:
         options["max_unroll"] = max_unroll
-    return wp.kernel(module="unique", enable_backward=False, module_options=options)(namespace[name])
+    return wp.kernel(module="unique", enable_backward=False, module_options=options,
+                     **(kernel_options or {}))(namespace[name])
 
 
 def struct_arguments(prefix, struct_type):
@@ -90,14 +91,14 @@ def struct_arrays(value, struct_type):
 
 
 def bind_query(query_type, name, primitive, inputs, outputs, body, bindings, block_dim, *,
-               device, groups=(), native_providers=(), native_requirements=(), max_unroll=None, **options):
+               device, groups=(), native_providers=(), native_requirements=(), max_unroll=None, kernel_options=None, **options):
     schemas = (("tree", DeviceTree), ("geometry", primitive.data_type), *groups)
     arguments = [*inputs, *(arg for prefix, schema in schemas for arg in struct_arguments(prefix, schema)), *outputs]
     body = [*(line for prefix, schema in schemas for line in struct_body(prefix, schema, prefix+"_type")), *body]
     bindings = {**{prefix+"_type": schema for prefix, schema in schemas}, **bindings}
     build = query_build_options(primitive, *native_providers, requirements=native_requirements)
     kernel = array_kernel(name, arguments, ["i = wp.tid()", *body], bindings,
-                          build=build, max_unroll=max_unroll)
+                          build=build, max_unroll=max_unroll, kernel_options=kernel_options)
     return query_type(kernel, primitive, len(inputs), len(outputs), block_dim,
                       device=device, group_types=tuple(schema for _, schema in groups), **options)
 

@@ -126,19 +126,19 @@ def _validate_tree(tree, n_refs):
     return arrays, postorder
 
 
-def _pack_ray_nodes(node_lower, node_upper, left, right, offset, count):
+def _pack_nodes(node_lower, node_upper, left, right, offset, count):
     """float4 xyz=bounds; w holds uint32 bits, never numeric floats.
     Bit 31 marks leaves; low bits hold left/begin or right/end (exclusive)."""
     end = offset.astype(np.int64) + count.astype(np.int64)
-    ray_lower = np.zeros((len(left), 4), dtype=np.float32)
-    ray_upper = np.zeros_like(ray_lower)
-    ray_lower[:, :3] = node_lower
-    ray_upper[:, :3] = node_upper
+    nodes = np.empty((len(left), 2, 4), dtype=np.float32)
+    lower, upper = nodes[:, 0], nodes[:, 1]
+    lower[:, :3] = node_lower
+    upper[:, :3] = node_upper
     lower_bits = left.astype(np.uint32, copy=True)
     upper_bits = right.astype(np.uint32, copy=True)
     leaves = count > 0
     lower_bits[leaves] = offset[leaves].astype(np.uint32) | np.uint32(0x80000000)
     upper_bits[leaves] = end[leaves].astype(np.uint32) | np.uint32(0x80000000)
-    ray_lower[:, 3] = lower_bits.view(np.float32)
-    ray_upper[:, 3] = upper_bits.view(np.float32)
-    return ray_lower, ray_upper
+    lower[:, 3] = lower_bits.view(np.float32)
+    upper[:, 3] = upper_bits.view(np.float32)
+    return nodes

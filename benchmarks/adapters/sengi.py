@@ -40,6 +40,7 @@ from sengi.queries.results import ResultPolicy
 from sengi.warp.device import configure_query_kernel
 from sengi.warp.launch import BoundQuery, bind_query, struct_arrays
 
+from . import sah_cache
 from ._timing import bind_kernel, describe, dtypes, measure
 
 PRIMITIVES = {
@@ -82,7 +83,8 @@ _BLOCK_DIMS = {
 }
 
 
-def prepare(geometry, *, builder="sah", leaf_size=4):
+def prepare(geometry, *, builder="sah", leaf_size=4, metadata=None):
+    start = perf_counter()
     primitive = PRIMITIVES[geometry.primitive]
     arrays = geometry.arrays
     if geometry.primitive == "triangles":
@@ -97,9 +99,25 @@ def prepare(geometry, *, builder="sah", leaf_size=4):
         )
     else:
         source = primitive.data(arrays["starts"], arrays["ends"])
-    index = bvh.build(
-        primitive, source, config=Config(leaf_size_threshold=leaf_size), builder=builder
-    )
+    config = Config(leaf_size_threshold=leaf_size)
+    if builder == "sah" and geometry.primitive in ("triangles", "points2", "points3"):
+        index, cache_status = sah_cache.cached_index(primitive, source, arrays, config)
+    else:
+        index = bvh.build(primitive, source, config=config, builder=builder)
+        cache_status = None
+    if metadata is not None:
+        jax.block_until_ready(index.data)
+        elapsed_ms = (perf_counter() - start) * 1000
+        if cache_status == "hit":
+            metadata["index_load_ms"] = elapsed_ms
+            metadata["build_scope"] = "cached SAH tree load, geometry packing and transfers"
+        else:
+            metadata["build_ms"] = elapsed_ms
+            metadata["build_scope"] = "index from host geometry, including transfers and any cold JAX compilation"
+            if cache_status == "miss":
+                metadata["build_scope"] += " and cache write"
+        if cache_status:
+            metadata["sah_cache"] = cache_status
     return index, source
 
 
@@ -340,12 +358,10 @@ def execute(geometry, jobs, options):
     device = wp.get_device(options.device)
     jax_device = wp.device_to_jax(device)
     with wp.ScopedDevice(device), jax.default_device(jax_device):
-        start = perf_counter()
+        preparation = {}
         index, source = prepare(
-            geometry, builder=options.builder, leaf_size=options.leaf_size
+            geometry, builder=options.builder, leaf_size=options.leaf_size, metadata=preparation
         )
-        jax.block_until_ready(index.data)
-        build_ms = (perf_counter() - start) * 1000
         modes = {job.case.query for job in jobs}
         start = perf_counter()
         boundary = prepare_boundary(index, source, modes)
@@ -383,8 +399,7 @@ def execute(geometry, jobs, options):
             outputs = dict(zip(CATALOG[case.query].outputs, arrays, strict=True))
             metadata = dict(
                 describe(launch, options),
-                build_ms=build_ms,
-                build_scope="index from host geometry, including transfers and any cold JAX compilation",
+                **preparation,
                 builder=options.builder,
                 jax_device_id=jax_device.id,
                 leaf_size=options.leaf_size,
